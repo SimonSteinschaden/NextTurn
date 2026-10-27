@@ -185,6 +185,12 @@ Die 80 % sind eine Wahrscheinlichkeit pro Ziehung und ein langfristiger Erwartun
 
 Konfiguration unter Recommendations: TopRankCutoff=500, TopRankProbability=0.8, RankDecayExponent=0.65. ExplorationRatio=0.2 steuert unabhängig davon den Entdeckungsanteil. RecommendationScore bleibt der Profilscore; die Ranggruppenwahl und der Rangfaktor wirken zusätzlich bei der Zufallsauswahl.
 
+## Community-Empfehlung zur Spieleranzahl
+
+Karten, Spieldetails und die Abend-Liste zeigen Empfohlen für … Personen aus den BGG-Community-Pollwerten RecommendedPlayerCounts und BestPlayerCounts. Zahlen werden zusammengeführt, bereinigt und sortiert; getrennte Empfehlungen wie 2 oder 4 bleiben getrennt. Hersteller-Min/Max wird nicht als Community-Empfehlung ausgegeben. Ohne Pollwerte erscheint Spielerempfehlung unbekannt.
+
+Ist die konkret ausgewählte Spieleranzahl enthalten, erscheint die Zeile grün mit Häkchen. Andernfalls bleibt die Empfehlung neutral sichtbar. Entdecken nutzt seinen Personenfilter, Suche/Sammlung ihren eigenen Spielerfilter und der Spieleabend seine gespeicherte Personenzahl. Ohne Spielerfilter gibt es keine Hervorhebung. Die Detailansicht übernimmt die Auswahl der Ansicht, aus der sie geöffnet wurde. Die Anzeige verändert weder Filter noch Bewertungen oder Matchquote.
+
 ## Persönliche Matchqualität
 
 Die Karten zeigen einen auf 0–100 normierten Ähnlichkeitsindex zu den aktuellen Favoriten. Es ist keine kalibrierte Wahrscheinlichkeit für einen zukünftigen Like. BGG-Rang, Community-Bewertung und die zufällige Auswahlchance erhöhen diesen Wert nicht.

@@ -879,11 +879,9 @@ test("designers appear below titles across cards and details and have their own 
     "Spieldesign unbekannt",
   );
   await page.getByRole("button", { name: "Sammlung", exact: true }).click();
-  const first = page
-    .locator(".catalog-card")
-    .filter({
-      has: page.getByRole("heading", { name: "Fixture Game 1", exact: true }),
-    });
+  const first = page.locator(".catalog-card").filter({
+    has: page.getByRole("heading", { name: "Fixture Game 1", exact: true }),
+  });
   await expect(first.locator(".designer-line")).toHaveText(
     "von Fixture Designer A, Fixture Designer B",
   );
@@ -898,14 +896,12 @@ test("designers appear below titles across cards and details and have their own 
   );
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Profil", exact: true }).click();
-  const panel = page
-    .locator(".chart-panel")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Beliebte Spieldesigner",
-        exact: true,
-      }),
-    });
+  const panel = page.locator(".chart-panel").filter({
+    has: page.getByRole("heading", {
+      name: "Beliebte Spieldesigner",
+      exact: true,
+    }),
+  });
   await expect(
     panel.locator(".stat-bar").filter({ hasText: "Fixture Designer A" }),
   ).toContainText("100%");
@@ -930,6 +926,169 @@ test("designers appear below titles across cards and details and have their own 
   await expect(page.locator(".shortlist-card .designer-line")).toHaveText(
     "von Fixture Designer A, Fixture Designer B",
   );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+});
+
+test("community player recommendation highlights only matching selections and keeps noncontiguous counts", async ({
+  page,
+}) => {
+  let game = {
+    ...games[0],
+    minPlayers: 2,
+    maxPlayers: 6,
+    recommendedPlayerCounts: [4, 2, 4],
+    bestPlayerCounts: [4],
+  };
+  let votes = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/swipes") votes++;
+  });
+  await page.route(
+    (url) => url.pathname === "/api/games/recommendations",
+    (route) => route.fulfill({ json: [game] }),
+  );
+  await page.route(
+    (url) => url.pathname === "/api/games/1",
+    (route) => route.fulfill({ json: game }),
+  );
+  await page.goto("/");
+  const line = page.locator(".swipe-game-card .player-recommendation");
+  const players = page.getByRole("combobox", { name: "Personen", exact: true });
+  await expect(line).toContainText("Empfohlen für 2 oder 4 Personen");
+  await expect(line).toHaveAttribute("data-matches-selected", "false");
+  const neutral = await line.evaluate(
+    (el) => getComputedStyle(el).backgroundColor,
+  );
+  await players.selectOption("2");
+  await expect(line).toHaveAttribute("data-matches-selected", "true");
+  expect(
+    await line.evaluate((el) => getComputedStyle(el).backgroundColor),
+  ).not.toBe(neutral);
+  await players.selectOption("3");
+  await expect(line).toHaveAttribute("data-matches-selected", "false");
+  await expect(line).toContainText("Empfohlen für 2 oder 4 Personen");
+  expect(
+    await line.evaluate((el) => getComputedStyle(el).backgroundColor),
+  ).toBe(neutral);
+  await players.selectOption("4");
+  await expect(line).toHaveAttribute("data-matches-selected", "true");
+  await page.getByRole("button", { name: "Spieldetails ansehen" }).click();
+  await expect(
+    page.getByRole("dialog").locator(".player-recommendation"),
+  ).toHaveAttribute("data-matches-selected", "true");
+  await page.keyboard.press("Escape");
+  game = { ...game, recommendedPlayerCounts: [], bestPlayerCounts: [] };
+  await page
+    .getByRole("button", { name: "Empfehlungen aktualisieren" })
+    .click();
+  await expect(line).toHaveText("Spielerempfehlung unbekannt");
+  await expect(line).toHaveAttribute("data-matches-selected", "false");
+  expect(votes).toBe(0);
+});
+
+test("catalog and details use their own player filter instead of the discovery selection", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Spieldetails ansehen" }).click();
+  await expect(
+    page.getByRole("dialog").locator(".player-recommendation"),
+  ).toHaveAttribute("data-matches-selected", "true");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Suche", exact: true }).click();
+  const first = page.locator(".catalog-card").first();
+  await expect(first.locator(".player-recommendation")).toHaveAttribute(
+    "data-matches-selected",
+    "false",
+  );
+  await first
+    .getByRole("button", {
+      name: "Fixture Game 1 – Details öffnen",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("dialog").locator(".player-recommendation"),
+  ).toHaveAttribute("data-matches-selected", "false");
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("combobox", { name: "Spieler", exact: true })
+    .selectOption("3");
+  await expect(first.locator(".player-recommendation")).toHaveAttribute(
+    "data-matches-selected",
+    "true",
+  );
+  await first
+    .getByRole("button", {
+      name: "Fixture Game 1 – Details öffnen",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("dialog").locator(".player-recommendation"),
+  ).toHaveAttribute("data-matches-selected", "true");
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("combobox", { name: "Spieler", exact: true })
+    .selectOption("2");
+  await expect(first.locator(".player-recommendation")).toContainText(
+    "Empfohlen für 3 Personen",
+  );
+  await expect(first.locator(".player-recommendation")).toHaveAttribute(
+    "data-matches-selected",
+    "false",
+  );
+});
+
+test("night player recommendation follows the saved plan in cards shortlist and details", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Suche", exact: true }).click();
+  for (const id of [1, 2]) {
+    const card = page.locator(".catalog-card").filter({
+      has: page.getByRole("heading", {
+        name: "Fixture Game " + id,
+        exact: true,
+      }),
+    });
+    await card
+      .getByRole("button", { name: "Besitze ich", exact: true })
+      .click();
+    await expect(
+      card.getByRole("button", { name: "✓ Im Besitz", exact: true }),
+    ).toBeVisible();
+  }
+  await page
+    .getByRole("button", { name: "Spieleabend planen", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Spieleabend anlegen", exact: true })
+    .click();
+  const cardLine = page.locator(".swipe-game-card .player-recommendation");
+  await expect(cardLine).toHaveAttribute("data-matches-selected", "true");
+  await page.getByRole("button", { name: "Vormerken", exact: true }).click();
+  const savedLine = page.locator(".shortlist-card .player-recommendation");
+  await expect(savedLine).toHaveAttribute("data-matches-selected", "true");
+  await expect(cardLine).toHaveAttribute("data-matches-selected", "true");
+  await page.locator(".night-settings-panel > summary").click();
+  await page
+    .getByRole("spinbutton", { name: "Personen", exact: true })
+    .fill("2");
+  await page
+    .getByRole("button", { name: "Änderungen speichern", exact: true })
+    .click();
+  await expect(cardLine).toHaveAttribute("data-matches-selected", "false");
+  await expect(savedLine).toHaveAttribute("data-matches-selected", "false");
+  await expect(savedLine).toContainText("Empfohlen für 3 Personen");
+  await page.locator(".shortlist-open").click();
+  await expect(
+    page.getByRole("dialog").locator(".player-recommendation"),
+  ).toHaveAttribute("data-matches-selected", "false");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,

@@ -1349,3 +1349,41 @@ h2 {
 .chart-grid > .chart-panel:last-child:nth-child(odd) {
   grid-column: 1 / -1;
 }
+
+.player-recommendation {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 0 12px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #73816b;
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.player-recommendation.is-match {
+  color: #315c35;
+  background: #e2efd7;
+  border-color: #c5d8b9;
+}
+.swipe-game-info .player-recommendation:not(.is-match) {
+  color: #bdcdb7;
+}
+.swipe-game-info .player-recommendation.is-match {
+  color: #284d2d;
+  background: #dfefcd;
+  border-color: #c5dba9;
+}
+.card-info .player-recommendation {
+  font-size: 10px;
+}
+.dialog-body > .player-recommendation {
+  font-size: 12px;
+}
+.shortlist-open .player-recommendation {
+  font-size: 10px;
+  margin: 7px 0 4px;
+}

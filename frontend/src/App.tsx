@@ -44,6 +44,7 @@ function App() {
   );
   const [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<BoardGame | null>(null);
+  const [detailPlayers, setDetailPlayers] = useState<number | undefined>();
   const [exitDirection, setExitDirection] = useState<
     "left" | "right" | "up" | "down" | "none"
   >("none");
@@ -146,6 +147,10 @@ function App() {
     setMaxRank(value);
     if (value === undefined) localStorage.removeItem("nextturn-max-rank");
     else localStorage.setItem("nextturn-max-rank", String(value));
+  }
+  function openGame(game: BoardGame, selectedPlayers?: number) {
+    setDetailPlayers(selectedPlayers);
+    setSelected(game);
   }
   function newSession() {
     if (
@@ -253,12 +258,13 @@ function App() {
                       <GameCard
                         key={games[0].id}
                         game={games[0]}
+                        selectedPlayers={players}
                         exitDirection={exitDirection}
                         disabled={saving || loading}
                         onSwipe={(direction) => {
                           void swipe(direction === "left" ? 0 : 1);
                         }}
-                        onDetails={() => setSelected(games[0])}
+                        onDetails={() => openGame(games[0], players)}
                       />
                     ) : (
                       <div className="empty-discovery" key="empty">
@@ -311,7 +317,7 @@ function App() {
             revision={revision}
             maxRank={maxRank}
             onMaxRankChange={changeMaxRank}
-            onOpen={setSelected}
+            onOpen={openGame}
             onRate={rate}
             onRemove={remove}
             onOwnership={own}
@@ -326,7 +332,7 @@ function App() {
             revision={revision}
             maxRank={maxRank}
             onMaxRankChange={changeMaxRank}
-            onOpen={setSelected}
+            onOpen={openGame}
             onRate={rate}
             onRemove={remove}
             onOwnership={own}
@@ -374,6 +380,7 @@ function App() {
         <GameDetails
           key={selected.id}
           game={selected}
+          selectedPlayers={detailPlayers}
           sessionId={sessionId}
           onClose={() => setSelected(null)}
           onRate={rate}

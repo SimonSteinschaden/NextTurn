@@ -173,3 +173,10 @@ Desktop, Tablet sowie 390-/320-Pixel-Ansichten mit echter API geprüft: kein hor
 - Echte Desktop-, Tablet-, 390- und 320-Pixel-Ansichten geprüft: Designerzeilen, Details, Profil und Abend-Liste ohne horizontales Überlaufen oder JavaScript-Fehler. Der vollständige Designer-Nachimport läuft unabhängig von der Oberfläche weiter; der lokale API-Schlüssel bleibt privat.
 
 Abschluss der Codeprüfung: aktuelle Designer-Metadaten für 5700 von 10.000 Katalogspielen abgerufen, 4300 werden im Hintergrund ergänzt; der Import läuft ohne aktuellen Fehler weiter. Fünf reale Queue-Anfragen lieferten jeweils 20 eindeutige, unbewertete Spiele innerhalb der gewählten Rangobergrenze. Ausschließlich die eigene Designer-QA-Session samt Testabend entfernt; bestehende Nutzerdaten bleiben erhalten.
+
+## Community-Spielerempfehlung auf Karten und in Details
+
+- Gemeinsame Zeile Empfohlen für … Personen in Entdecken, Katalog, Favoriten/Besitz, Details sowie Spieleabend-Karten und Abend-Liste. Echte RecommendedPlayerCounts und BestPlayerCounts werden dedupliziert und numerisch sortiert; nicht zusammenhängende Zahlen bleiben ausdrücklich getrennt. Keine Ableitung aus Hersteller-Min/Max; fehlende Pollwerte bleiben als unbekannt sichtbar.
+- Grün mit Häkchen ausschließlich bei Mitgliedschaft der konkret ausgewählten Spielerzahl in diesen Community-Werten. Andernfalls neutrale Zeile, auch ohne ausgewählten Filter. Details übernehmen den Kontext ihres Aufrufers; der Planer verwendet seine gespeicherte Personenzahl.
+- 28 Desktop-/Mobiltests prüfen unter anderem passende/unpassende Zahlen, 2 oder 4 ohne erfundene 3, fehlende Pollwerte, sichtbaren Farbwechsel, getrennte Such-/Entdeckenfilter, gespeicherte Abend-Einstellungen und unveränderte Bewertungen.
+- Live-QA mit Ark Nova: Community empfiehlt 1, 2 oder 3; Auswahl 1 hebt hervor, Auswahl 4 bleibt neutral trotz unterstütztem Herstellerbereich 1–4. Details bei 1440, 820, 390 und 320 Pixeln zentral ohne horizontales Überlaufen. Frontend-Build und ESLint erfolgreich.

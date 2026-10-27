@@ -1,3 +1,4 @@
+import PlayerRecommendation from "./PlayerRecommendation";
 import DesignerLine from "./DesignerLine";
 import RankFilter from "./RankFilter";
 import MatchQualityBadge from "./MatchQualityBadge";
@@ -18,7 +19,7 @@ type Props = {
   revision: number;
   maxRank?: number;
   onMaxRankChange: (rank: number | undefined) => void;
-  onOpen: (game: BoardGame) => void;
+  onOpen: (game: BoardGame, selectedPlayers?: number) => void;
   onRate: (game: BoardGame, action: SwipeAction) => Promise<void>;
   onRemove: (game: BoardGame) => Promise<void>;
 };
@@ -308,7 +309,7 @@ export default function CatalogView({
           <article className="catalog-card" key={game.id}>
             <button
               className="card-open"
-              onClick={() => onOpen(game)}
+              onClick={() => onOpen(game, query.players)}
               aria-label={game.name + " – Details öffnen"}
             >
               <div className="catalog-cover">
@@ -328,6 +329,10 @@ export default function CatalogView({
               <div className="card-info">
                 <h2>{game.name}</h2>
                 <DesignerLine designers={game.designers} />
+                <PlayerRecommendation
+                  game={game}
+                  selectedPlayers={query.players}
+                />
                 <MatchQualityBadge quality={game.matchQuality} compact />
                 <p>
                   {game.yearPublished ?? "Jahr unbekannt"} · ★{" "}

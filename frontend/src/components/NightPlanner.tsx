@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { AnimatePresence } from "framer-motion";
+import PlayerRecommendation from "./PlayerRecommendation";
 import DesignerLine from "./DesignerLine";
 import RankFilter from "./RankFilter";
 import GameCard from "./GameCard";
@@ -433,6 +434,7 @@ export default function NightPlanner({
                     <GameCard
                       key={candidate.id}
                       game={candidate}
+                      selectedPlayers={active.plan.players}
                       exitDirection={exitDirection}
                       disabled={disabled}
                       planning
@@ -498,6 +500,10 @@ export default function NightPlanner({
                     <span>
                       <strong>{game.name}</strong>
                       <DesignerLine designers={game.designers} />
+                      <PlayerRecommendation
+                        game={game}
+                        selectedPlayers={active.plan.players}
+                      />
                       <small>
                         {action === 2 ? "★ Top-Wahl · " : ""}
                         {game.isOwned ? "Im Besitz" : "Zum Ausleihen"}
@@ -554,6 +560,7 @@ export default function NightPlanner({
         <GameDetails
           key={selected.id}
           game={selected}
+          selectedPlayers={current?.plan.players}
           sessionId={sessionId}
           planning
           onClose={() => setSelected(null)}

@@ -1,3 +1,4 @@
+import PlayerRecommendation from "./PlayerRecommendation";
 import DesignerLine from "./DesignerLine";
 import MatchQualityBadge from "./MatchQualityBadge";
 import { useEffect, useRef, useState } from "react";
@@ -6,6 +7,7 @@ import type { BoardGame, SwipeAction } from "../api/nextTurnApi";
 export default function GameDetails({
   game,
   sessionId,
+  selectedPlayers,
   onClose,
   onRate,
   onOwnership,
@@ -13,6 +15,7 @@ export default function GameDetails({
 }: {
   game: BoardGame;
   sessionId: string;
+  selectedPlayers?: number;
   onClose: () => void;
   planning?: boolean;
   onOwnership: (g: BoardGame, owned: boolean) => Promise<void>;
@@ -106,12 +109,16 @@ export default function GameDetails({
           Bayes-Bewertung: {details.bayesAverage?.toFixed(2) ?? "–"} ·{" "}
           {details.usersRated?.toLocaleString("de-DE") ?? "–"} Bewertungen
         </p>
-        <p className="muted">
-          BGG empfiehlt:{" "}
-          {details.recommendedPlayerCounts.join(", ") || "Keine Angaben"}{" "}
-          Personen · Beste Besetzung:{" "}
-          {details.bestPlayerCounts.join(", ") || "Keine Angaben"}
-        </p>
+        <PlayerRecommendation
+          game={details}
+          selectedPlayers={selectedPlayers}
+        />
+        {details.bestPlayerCounts.length > 0 && (
+          <p className="muted">
+            Beste Besetzung laut Community:{" "}
+            {details.bestPlayerCounts.join(", ")}
+          </p>
+        )}
         {!details.detailsAvailable && (
           <p className="notice">
             Die BGG-Details wurden noch nicht importiert. Fehlende Angaben
