@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: nextturn_postgres
+    environment:
+      POSTGRES_USER: nextturn
+      POSTGRES_PASSWORD: nextturn_password
+      POSTGRES_DB: nextturn_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - nextturn_postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: nextturn_redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  nextturn_postgres_data:
