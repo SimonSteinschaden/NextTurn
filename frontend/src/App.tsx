@@ -12,6 +12,7 @@ import {
   setOwnership,
 } from "./api/nextTurnApi";
 import type { BoardGame, SwipeAction } from "./api/nextTurnApi";
+import diceLogo from "./assets/Würfel-Icon mit eingeprägtem N.png";
 import "./App.css";
 
 type Tab = "discover" | "search" | "collection" | "night" | "profile";
@@ -148,8 +149,8 @@ function App() {
             setTab("discover");
           }}
         >
-          <span className="brand-mark">
-            n<span>↗</span>
+          <span className="brand-mark" aria-hidden="true">
+            <img src={diceLogo} alt="" width={56} height={56} />
           </span>
           <span>
             next<span>turn</span>

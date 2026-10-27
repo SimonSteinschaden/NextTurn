@@ -119,16 +119,21 @@ h2 {
   margin-top: 9px;
 }
 .brand-mark {
-  background: #244d3d;
-  color: #f7f8ed;
-  border-radius: 11px;
-  padding: 7px 11px;
-  position: relative;
-  font-size: 34px;
+  display: block;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #0a3027;
 }
-.brand-mark > span {
-  font-size: 20px;
-  margin-left: 2px;
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Frame the icon inside the original image's generous green margins. */
+  transform: translateY(2px) scale(1.5);
 }
 .main-nav {
   display: flex;
@@ -804,7 +809,9 @@ h2 {
     font-size: 25px;
   }
   .brand-mark {
-    font-size: 29px;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
   }
   .brand small {
     font-size: 7px;
