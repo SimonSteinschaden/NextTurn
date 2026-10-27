@@ -108,7 +108,8 @@ public class EfGameNightRepository(NextTurnDbContext db) : IGameNightRepository
 
     public async Task<(List<BoardGameDto> Games, int Remaining)> CandidatesAsync(
         GameNight night,
-        CancellationToken ct
+        CancellationToken ct,
+        int? maxRank = null
     )
     {
         // Global Likes/Dislikes/Skips are not night decisions; only this night's choices are excluded.
@@ -116,6 +117,8 @@ public class EfGameNightRepository(NextTurnDbContext db) : IGameNightRepository
             .Where(g =>
                 !db.GameNightChoices.Any(c => c.GameNightId == night.Id && c.BggId == g.BggId)
             );
+        if (maxRank.HasValue)
+            query = query.Where(g => g.BggRank > 0 && g.BggRank <= maxRank);
         var remaining = await query.CountAsync(ct);
         var games = await query
             .OrderBy(g => EF.Functions.Random())
@@ -144,7 +147,8 @@ public class EfGameNightRepository(NextTurnDbContext db) : IGameNightRepository
     public async Task<PagedResult<GameNightSelection>> SelectionsAsync(
         GameNight night,
         int page,
-        CancellationToken ct
+        CancellationToken ct,
+        int? maxRank = null
     )
     {
         const int size = 24;
@@ -154,6 +158,8 @@ public class EfGameNightRepository(NextTurnDbContext db) : IGameNightRepository
                 c.GameNightId == night.Id
                 && (c.Action == SwipeAction.Like || c.Action == SwipeAction.SuperLike)
             );
+        if (maxRank.HasValue)
+            query = query.Where(c => c.Game.BggRank > 0 && c.Game.BggRank <= maxRank);
         var rows = await query
             .OrderByDescending(c => c.Action == SwipeAction.SuperLike)
             .ThenByDescending(c => c.UpdatedAt)

@@ -129,3 +129,22 @@ Verifikation der Matchqualität: 41 Backend-Tests und acht Browser-Tests erfolgr
 - 57 Backendtests und zwölf Browsertests erfolgreich; Frontend-Produktionsbuild und ESLint ohne Fehler.
 
 Live-Prüfung mit separater QA-Session: War of the Ring behält seinen Fantasy-Match von 67 % nach zusätzlichem Wirtschafts-SuperLike; Terraforming Mars behält seinen Wirtschafts-Match von 73 % nach Entfernen des Fantasy-Likes. Suche und Details stimmen überein; Entdecken liefert weiter 20 Vorschläge. Echte Desktop-/Mobilansichten ohne JavaScript-Fehler oder Überlauf geprüft. Anschließend nur die eigene QA-Session entfernt; bestehende Nutzersitzungen und Katalogdaten erhalten.
+
+## Erweiterung: Frei einstellbare BGG-Rangobergrenze
+
+- Gemeinsames Feld BGG-Rang bis in Entdecken, Katalog/Sammlung und Spieleabend. Eingabe 1–10.000 einschließlich; leer bedeutet alle Ränge. Browserpersistenz und gleiche Einstellung nach Ansichtswechsel bzw. Reload.
+- Serverseitiger maxRank-Queryparameter vor Suche, Pagination und Kandidatenauswahl. Auch die reine Empfehlungsauswahl prüft die Grenze, sodass ein erschöpfter Pool nicht auf schlechtere Spiele ausweicht. Unbekannte/ungültige Ränge erfüllen eine aktive Grenze nicht.
+- Favoriten, Besitz und Abend-Auswahlen bleiben unverändert gespeichert. Rangfilter blendet Einträge aus und zählt nur sichtbare Treffer; Aufheben der Grenze stellt sie wieder her. Keine Schemaänderung oder neue BGG-Abfrage.
+- Frontend verwirft überholte Queueantworten und zeigt während eines gewechselten Abend-Filters keine alte Queue als aktuelle Auswahl. Katalog und Abend-Liste beginnen nach einer Grenzänderung auf Seite 1. Gefilterte leere Sammlungen behaupten nicht, dass noch keine Spiele gespeichert seien.
+- Grenzwerttests bei 1/499/500/501/10.000, Ranggruppen-Fallback, unbekannte Ränge, Pagination, kombinierte Filter, erschöpfte Vorschläge, gespeicherte Spiele und gefilterte Nachtantworten. Browserabläufe prüfen gemeinsame Werte, Reload-Persistenz, Rangfilter schon beim Anlegen eines Abends sowie das Wiederanzeigen ausgeblendeter Einträge.
+- 65 Backendtests und 16 Desktop-/Mobiltests erfolgreich. TypeScript-Produktionsbuild und ESLint ohne Fehler; EF-Modellabgleich bestätigt keine ausstehende Migration.
+- Echte API-Prüfung mit eigener QA-Session: Grenze 538 liefert 538 Treffer und enthält Rang 538; nach Skip des einzigen Rang-1-Spiels bleibt die auf Rang 1 begrenzte Queue leer. Top-500-Queue enthält 20 passende Spiele. Filter blendet Besitz/Favorit/Abend-Einträge aus, Aufheben stellt sie wieder her; Statistik unverändert. Sechs ungültige Grenzanfragen an verschiedene Endpunkte werden mit HTTP 400 abgelehnt.
+
+Desktop, Tablet sowie 390-/320-Pixel-Ansichten mit echter API geprüft: kein horizontaler Überlauf oder JavaScript-Fehler. Ein ungespeicherter Spieleabend-Entwurf bleibt beim Ändern der Ranggrenze erhalten. Anschließend ausschließlich die benannte QA-Session samt Testabend entfernt; bestehende Nutzerdaten und Katalog bleiben erhalten.
+
+## Korrekturen: Neutrale Filterwechsel und zentrierte Spieldetails
+
+- GameCard kennt einen neutralen Übergang ohne seitliche Bewegung. Rang-/Personenfilter und Queue-Aktualisierung verwenden diesen Übergang. Nur explizite Swipe-/Bewertungsaktionen setzen eine Richtung. Spieleabend-Einstellungsänderungen verwenden ebenfalls den neutralen Übergang.
+- Zusätzlicher Browserregressionstest führt zuerst einen echten Like aus und tippt anschließend den Rangfilter Ziffer für Ziffer. Er misst die horizontale Kartentransformation über mehrere Animationsframes und bestätigt, dass keine weitere Bewertung gesendet wird; ein anschließender Dislike-Button funktioniert weiterhin.
+- Der native Detaildialog erhält explizit position:fixed, inset:0 und margin:auto, damit der CSS-Reset die Browserzentrierung nicht aufhebt. Inhalt bleibt in der größenbegrenzten Dialogfläche scrollbar.
+- 18 Browsertests auf Desktop/Mobil sowie Frontend-Build und Lint erfolgreich. Die zuvor geprüften 65 Backendtests bleiben unverändert. Reale Dialogmessung bei 1440x1000, 390x844 und 1280x600: jeweils exakt zentriert (horizontaler und vertikaler Mittelpunktversatz 0 px), Escape schließt weiterhin.

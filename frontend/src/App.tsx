@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
+import RankFilter from "./components/RankFilter";
 import GameCard from "./components/GameCard";
 import CatalogView from "./components/CatalogView";
 import NightPlanner from "./components/NightPlanner";
@@ -26,6 +27,12 @@ const tabs: { id: Tab; label: string; icon: string }[] = [
 function App() {
   const [tab, setTab] = useState<Tab>("discover");
   const [players, setPlayers] = useState(3);
+  const [maxRank, setMaxRank] = useState<number | undefined>(() => {
+    const saved = Number(localStorage.getItem("nextturn-max-rank"));
+    return Number.isInteger(saved) && saved >= 1 && saved <= 10000
+      ? saved
+      : undefined;
+  });
   const [games, setGames] = useState<BoardGame[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,8 +45,8 @@ function App() {
   const [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<BoardGame | null>(null);
   const [exitDirection, setExitDirection] = useState<
-    "left" | "right" | "up" | "down"
-  >("left");
+    "left" | "right" | "up" | "down" | "none"
+  >("none");
   const [sessionId] = useState(() => {
     const existing = localStorage.getItem("nextturn-session-id");
     if (existing && /^[a-zA-Z0-9_-]{1,100}$/.test(existing)) return existing;
@@ -60,6 +67,7 @@ function App() {
           players,
           sessionId,
           controller.signal,
+          maxRank,
         );
         if (sequence === requestSequence.current)
           setGames(result.filter((g) => !rated.current.has(g.id)));
@@ -76,7 +84,7 @@ function App() {
     };
     void load();
     return () => controller.abort();
-  }, [players, sessionId, discoveryRevision, reload]);
+  }, [players, sessionId, discoveryRevision, reload, maxRank]);
   const rate = useCallback(
     async (game: BoardGame, action: SwipeAction) => {
       if (savingRef.current)
@@ -93,6 +101,7 @@ function App() {
         setDiscoveryRevision((v) => v + 1);
       } catch (e) {
         rated.current.delete(game.id);
+        setExitDirection("none");
         setReload((v) => v + 1);
         throw e;
       } finally {
@@ -127,6 +136,16 @@ function App() {
       old.map((g) => (g.id === game.id ? { ...g, isOwned } : g)),
     );
     setRevision((v) => v + 1);
+  }
+  function changeMaxRank(value: number | undefined) {
+    if (savingRef.current) return;
+    requestSequence.current++;
+    setExitDirection("none");
+    setGames([]);
+    setError("");
+    setMaxRank(value);
+    if (value === undefined) localStorage.removeItem("nextturn-max-rank");
+    else localStorage.setItem("nextturn-max-rank", String(value));
   }
   function newSession() {
     if (
@@ -177,21 +196,29 @@ function App() {
               <div>
                 <h1 id="discover-title">Was kommt auf den Tisch?</h1>
               </div>
-              <label className="players-control">
-                Personen
-                <select
-                  value={players}
+              <div className="discovery-filters">
+                <RankFilter
+                  value={maxRank}
+                  onChange={changeMaxRank}
                   disabled={saving}
-                  onChange={(e) => {
-                    setGames([]);
-                    setPlayers(Number(e.target.value));
-                  }}
-                >
-                  {Array.from({ length: 12 }, (_, i) => (
-                    <option key={i + 1}>{i + 1}</option>
-                  ))}
-                </select>
-              </label>
+                />
+                <label className="players-control">
+                  Personen
+                  <select
+                    value={players}
+                    disabled={saving}
+                    onChange={(e) => {
+                      setExitDirection("none");
+                      setGames([]);
+                      setPlayers(Number(e.target.value));
+                    }}
+                  >
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <option key={i + 1}>{i + 1}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
             <div className="discovery-layout">
               <div className="swipe-stage">
@@ -211,6 +238,7 @@ function App() {
                   <button
                     disabled={saving || loading}
                     onClick={() => {
+                      setExitDirection("none");
                       setError("");
                       setReload((v) => v + 1);
                     }}
@@ -241,8 +269,8 @@ function App() {
                             : "Hier ist gerade alles entdeckt."}
                         </h2>
                         <p>
-                          Versuche eine andere Spieleranzahl oder lade die
-                          Empfehlungen neu.
+                          Passe die Ranggrenze oder Spieleranzahl an oder lade
+                          die Empfehlungen neu.
                         </p>
                         <button onClick={() => setTab("search")}>
                           Im Katalog stöbern →
@@ -281,6 +309,8 @@ function App() {
           <CatalogView
             sessionId={sessionId}
             revision={revision}
+            maxRank={maxRank}
+            onMaxRankChange={changeMaxRank}
             onOpen={setSelected}
             onRate={rate}
             onRemove={remove}
@@ -294,6 +324,8 @@ function App() {
             collectionMode={collectionMode}
             onCollectionModeChange={setCollectionMode}
             revision={revision}
+            maxRank={maxRank}
+            onMaxRankChange={changeMaxRank}
             onOpen={setSelected}
             onRate={rate}
             onRemove={remove}
@@ -302,6 +334,8 @@ function App() {
         )}
         {tab === "night" && (
           <NightPlanner
+            maxRank={maxRank}
+            onMaxRankChange={changeMaxRank}
             sessionId={sessionId}
             revision={revision}
             onOwnership={own}

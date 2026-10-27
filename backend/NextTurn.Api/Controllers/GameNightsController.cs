@@ -43,16 +43,18 @@ public class GameNightsController(GameNightService service) : ControllerBase
         Guid id,
         string sessionId,
         [Range(1, 10000)] int page = 1,
+        [Range(1, 10000)] int? maxRank = null,
         CancellationToken ct = default
-    ) => Run(async () => await service.BoardAsync(id, sessionId, page, ct));
+    ) => Run(async () => await service.BoardAsync(id, sessionId, page, ct, maxRank));
 
     [HttpPut("{id:guid}")]
     public Task<IActionResult> Update(
         Guid id,
         string sessionId,
         [FromBody] GameNightRequest request,
+        [Range(1, 10000)] int? maxRank,
         CancellationToken ct
-    ) => Run(async () => await service.UpdateAsync(id, sessionId, request, ct));
+    ) => Run(async () => await service.UpdateAsync(id, sessionId, request, ct, maxRank));
 
     [HttpPost("{id:guid}/choices/{gameId:int}")]
     public Task<IActionResult> Choose(
@@ -60,9 +62,10 @@ public class GameNightsController(GameNightService service) : ControllerBase
         int gameId,
         string sessionId,
         [FromBody] GameNightChoiceRequest request,
+        [Range(1, 10000)] int? maxRank,
         CancellationToken ct
     ) =>
         Run(async () =>
-            await service.ChooseAsync(id, sessionId, gameId, request.Action!.Value, ct)
+            await service.ChooseAsync(id, sessionId, gameId, request.Action!.Value, ct, maxRank)
         );
 }

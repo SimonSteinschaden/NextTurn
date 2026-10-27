@@ -36,11 +36,12 @@ test.beforeEach(async ({ page }) => {
       userAction: ratings.get(game.id),
     };
   }
-  function board(id: string) {
+  function board(id: string, maxRank?: number) {
     const night = nights.get(id)!;
     const candidates = games
       .filter(
         (g) =>
+          (maxRank === undefined || g.bggRank <= maxRank) &&
           !night.choices.has(g.id) &&
           g.minPlayers <= night.plan.players &&
           g.maxPlayers >= night.plan.players &&
@@ -50,7 +51,11 @@ test.beforeEach(async ({ page }) => {
       )
       .map(enrich);
     const selections = games
-      .filter((g) => [1, 2].includes(night.choices.get(g.id) ?? -1))
+      .filter(
+        (g) =>
+          (maxRank === undefined || g.bggRank <= maxRank) &&
+          [1, 2].includes(night.choices.get(g.id) ?? -1),
+      )
       .map((g) => ({ game: enrich(g), action: night.choices.get(g.id) }));
     return {
       plan: night.plan,
@@ -69,6 +74,9 @@ test.beforeEach(async ({ page }) => {
     async (route) => {
       const url = new URL(route.request().url());
       const path = url.pathname;
+      const maxRank = url.searchParams.has("maxRank")
+        ? Number(url.searchParams.get("maxRank"))
+        : undefined;
       let data: unknown;
       if (path === "/api/game-nights") {
         if (route.request().method() === "POST") {
@@ -95,7 +103,7 @@ test.beforeEach(async ({ page }) => {
             );
         else if (route.request().method() === "PUT")
           nights.get(id)!.plan = { ...route.request().postDataJSON(), id };
-        data = board(id);
+        data = board(id, maxRank);
       } else if (path.startsWith("/api/player/owned/")) {
         const id = Number(path.split("/").at(-1));
         if (route.request().postDataJSON().isOwned) owned.add(id);
@@ -116,7 +124,11 @@ test.beforeEach(async ({ page }) => {
       else if (path === "/api/games/facets")
         data = { categories: ["Fantasy"], mechanics: ["Deck Building"] };
       else if (path === "/api/games/recommendations")
-        data = games.filter((g) => !ratings.has(g.id));
+        data = games.filter(
+          (g) =>
+            !ratings.has(g.id) &&
+            (maxRank === undefined || g.bggRank <= maxRank),
+        );
       else if (path === "/api/swipes") {
         const body = route.request().postDataJSON();
         ratings.set(body.gameId, body.action);
@@ -167,6 +179,7 @@ test.beforeEach(async ({ page }) => {
           .filter(
             (g) =>
               g.name.toLowerCase().includes(q) &&
+              (maxRank === undefined || g.bggRank <= maxRank) &&
               (path === "/api/games" ||
                 (path === "/api/player/owned"
                   ? owned.has(g.id)
@@ -477,4 +490,188 @@ test("failed night choice preserves its card and shortlist", async ({
   await expect(
     page.getByRole("button", { name: "Vormerken", exact: true }),
   ).toBeEnabled();
+});
+
+test("rank limit is shared and persistent without removing favorites or ownership", async ({
+  page,
+}) => {
+  let ratings = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/swipes") ratings++;
+  });
+  await page.goto("/");
+  const rank = page.getByRole("spinbutton", { name: "BGG-Rang bis" });
+  await expect(page.locator(".swipe-game-card")).toContainText(
+    "Fixture Game 1",
+  );
+  await rank.fill("1");
+  await page.getByRole("button", { name: "Like", exact: true }).click();
+  await expect(page.locator(".swipe-game-card")).toHaveCount(0);
+  await rank.fill("2");
+  await expect(page.locator(".swipe-game-card")).toContainText(
+    "Fixture Game 2",
+  );
+  await page.getByRole("button", { name: "Suche", exact: true }).click();
+  await expect(rank).toHaveValue("2");
+  await expect(page.locator(".catalog-card")).toHaveCount(2);
+  await rank.clear();
+  await expect(page.locator(".catalog-card")).toHaveCount(3);
+  const third = page
+    .locator(".catalog-card")
+    .filter({ hasText: "Fixture Game 3" });
+  await third.getByRole("button", { name: "Besitze ich", exact: true }).click();
+  await expect(
+    third.getByRole("button", { name: "✓ Im Besitz", exact: true }),
+  ).toBeVisible();
+  await third.getByRole("button", { name: "Like", exact: true }).click();
+  await rank.fill("2");
+  await expect(page.locator(".catalog-card")).toHaveCount(2);
+  await page.getByRole("button", { name: "Sammlung", exact: true }).click();
+  await expect(page.locator(".catalog-card")).toHaveCount(1);
+  await expect(page.locator(".catalog-card")).toContainText("Fixture Game 1");
+  await rank.clear();
+  await expect(page.locator(".catalog-card")).toHaveCount(2);
+  await page.getByRole("button", { name: "In Besitz", exact: true }).click();
+  await expect(page.locator(".catalog-card")).toHaveCount(1);
+  await rank.fill("2");
+  await expect(page.locator(".result-status")).toContainText(
+    "Keine Spiele für diese Filter gefunden.",
+  );
+  await expect(page.locator(".catalog-card")).toHaveCount(0);
+  await page.reload();
+  await expect(rank).toHaveValue("2");
+  await expect(page.locator(".swipe-game-card")).toContainText(
+    "Fixture Game 2",
+  );
+  await page.getByRole("button", { name: "Sammlung", exact: true }).click();
+  await page.getByRole("button", { name: "In Besitz", exact: true }).click();
+  await rank.clear();
+  await expect(page.locator(".catalog-card")).toHaveCount(1);
+  await expect(page.locator(".catalog-card")).toContainText("Fixture Game 3");
+  expect(ratings).toBe(2);
+});
+
+test("rank limit filters night responses and preserves hidden saved choices", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Suche", exact: true }).click();
+  for (const id of [1, 2, 3]) {
+    const card = page
+      .locator(".catalog-card")
+      .filter({ hasText: "Fixture Game " + id });
+    await card
+      .getByRole("button", { name: "Besitze ich", exact: true })
+      .click();
+    await expect(
+      card.getByRole("button", { name: "✓ Im Besitz", exact: true }),
+    ).toBeVisible();
+  }
+  await page
+    .getByRole("button", { name: "Spieleabend planen", exact: true })
+    .click();
+  const rank = page.getByRole("spinbutton", { name: "BGG-Rang bis" });
+  await rank.fill("2");
+  await expect(
+    page.getByRole("button", { name: "Spieleabend anlegen", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("button", { name: "Spieleabend anlegen", exact: true })
+    .click();
+  await expect(page.locator(".swipe-game-card")).toContainText(
+    "Fixture Game 1",
+  );
+  await page.getByRole("button", { name: "Vormerken", exact: true }).click();
+  await expect(page.locator(".swipe-game-card")).toContainText(
+    "Fixture Game 2",
+  );
+  await page.getByRole("button", { name: "Top-Wahl", exact: true }).click();
+  await expect(page.locator(".swipe-game-card")).toHaveCount(0);
+  await expect(page.locator(".shortlist-card")).toHaveCount(2);
+  await page
+    .getByRole("button", {
+      name: "Auch Spiele nicht im Besitz anzeigen",
+      exact: true,
+    })
+    .click();
+  await expect(page.locator(".swipe-game-card")).toHaveCount(0);
+  await page.locator(".night-settings-panel > summary").click();
+  await page
+    .getByRole("textbox", { name: "Name", exact: true })
+    .fill("Entwurf bleibt erhalten");
+  await rank.fill("1");
+  await expect(page.locator(".shortlist-card")).toHaveCount(1);
+  await expect(
+    page.getByRole("textbox", { name: "Name", exact: true }),
+  ).toHaveValue("Entwurf bleibt erhalten");
+  await expect(page.locator(".shortlist-card")).toContainText("Fixture Game 1");
+  await page.reload();
+  await expect(rank).toHaveValue("1");
+  await page
+    .getByRole("button", { name: "Spieleabend planen", exact: true })
+    .click();
+  await expect(page.locator(".shortlist-card")).toHaveCount(1);
+  await expect(page.locator(".swipe-game-card")).toHaveCount(0);
+  await rank.clear();
+  await expect(page.locator(".shortlist-card")).toHaveCount(2);
+  await expect(page.locator(".swipe-game-card")).toContainText(
+    "Fixture Game 3",
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+});
+
+test("typing a rank never reuses a previous swipe or sends a rating", async ({
+  page,
+}) => {
+  const votes: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/swipes")
+      votes.push(request.postData() ?? "");
+  });
+  await page.goto("/");
+  await expect(page.locator(".swipe-game-card")).toHaveCSS("opacity", "1");
+  await page.getByRole("button", { name: "Like", exact: true }).click();
+  await expect(page.locator(".swipe-game-card")).toContainText(
+    "Fixture Game 2",
+  );
+  await expect(page.locator(".swipe-game-card")).toHaveCSS("opacity", "1");
+  const rank = page.getByRole("spinbutton", { name: "BGG-Rang bis" });
+  const [maximumHorizontalOffset] = await Promise.all([
+    page.evaluate(
+      () =>
+        new Promise<number>((resolve) => {
+          const until = performance.now() + 1200;
+          let maximum = 0;
+          function sample() {
+            document.querySelectorAll(".swipe-game-card").forEach((card) => {
+              const transform = getComputedStyle(card).transform;
+              if (transform !== "none")
+                maximum = Math.max(
+                  maximum,
+                  Math.abs(new DOMMatrixReadOnly(transform).m41),
+                );
+            });
+            if (performance.now() < until) requestAnimationFrame(sample);
+            else resolve(maximum);
+          }
+          sample();
+        }),
+    ),
+    rank.pressSequentially("500", { delay: 40 }),
+  ]);
+  await expect(rank).toHaveValue("500");
+  await expect(page.locator(".swipe-game-card")).toContainText(
+    "Fixture Game 2",
+  );
+  expect(maximumHorizontalOffset).toBeLessThan(1);
+  expect(votes).toHaveLength(1);
+  await page.getByRole("button", { name: "Dislike", exact: true }).click();
+  await expect(page.locator(".swipe-game-card")).toContainText(
+    "Fixture Game 3",
+  );
+  expect(votes).toHaveLength(2);
 });

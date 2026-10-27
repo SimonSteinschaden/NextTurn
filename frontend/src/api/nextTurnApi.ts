@@ -54,6 +54,7 @@ export type CatalogQuery = {
   sort?: string;
   players?: number;
   maxMinutes?: number;
+  maxRank?: number;
   minComplexity?: number;
   maxComplexity?: number;
   category?: string;
@@ -131,9 +132,10 @@ export const getRecommendations = (
   players?: number,
   sessionId?: string,
   signal?: AbortSignal,
+  maxRank?: number,
 ) =>
   request<BoardGame[]>(
-    "/api/games/recommendations" + params({ players, sessionId }),
+    "/api/games/recommendations" + params({ players, sessionId, maxRank }),
     { signal },
   );
 export const searchGames = (
@@ -218,28 +220,41 @@ export const getNight = (
   sessionId: string,
   page = 1,
   signal?: AbortSignal,
+  maxRank?: number,
 ) =>
-  request<NightBoard>("/api/game-nights/" + id + params({ sessionId, page }), {
-    signal,
-  });
+  request<NightBoard>(
+    "/api/game-nights/" + id + params({ sessionId, page, maxRank }),
+    {
+      signal,
+    },
+  );
 export const updateNight = (
   id: string,
   sessionId: string,
   settings: GameNightSettings,
+  maxRank?: number,
 ) =>
-  request<NightBoard>("/api/game-nights/" + id + params({ sessionId }), {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(settings),
-  });
+  request<NightBoard>(
+    "/api/game-nights/" + id + params({ sessionId, maxRank }),
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    },
+  );
 export const chooseNightGame = (
   id: string,
   sessionId: string,
   gameId: number,
   action: SwipeAction,
+  maxRank?: number,
 ) =>
   request<NightBoard>(
-    "/api/game-nights/" + id + "/choices/" + gameId + params({ sessionId }),
+    "/api/game-nights/" +
+      id +
+      "/choices/" +
+      gameId +
+      params({ sessionId, maxRank }),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

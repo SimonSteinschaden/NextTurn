@@ -105,6 +105,16 @@ dotnet test NextTurn.slnx --filter "Category!=Integration"
 
 Die Browser-Regressionstests verwenden ausdrücklich synthetische API-Fixtures. Zusätzlich wird die echte lokale API mit PostgreSQL und dem fortlaufenden Import geprüft. Eine Testbewertung verändert keine echte Browsersession.
 
+## BGG-Rangfilter
+
+BGG-Rang bis ist ein gemeinsamer, frei einstellbarer Filter für Entdecken, Suche, Favoriten, Besitz und Spieleabend. Erlaubt sind ganze Zahlen von 1 bis 10.000; die Grenze ist einschließlich: 500 zeigt Rang 1–500, 538 zeigt Rang 1–538. Ein leeres Feld hebt die Einschränkung auf. Die Einstellung bleibt im localStorage des Browsers gespeichert und wird zwischen den Ansichten übernommen.
+
+Mit aktiver Grenze werden auch Spiele ohne gültigen bekannten Rang ausgeblendet. Die API wendet die Grenze vor Zählung, Pagination und begrenzter Kandidatenauswahl an. Ist unterhalb der Grenze kein unbewertetes passendes Spiel mehr verfügbar, bleibt Entdecken leer; die Ranggruppen-Auswahl erweitert die Grenze nicht automatisch. Die bisherigen Ranking- und Entdeckungswahrscheinlichkeiten gelten innerhalb des verbleibenden Pools, soweit beide Ranggruppen vorhanden sind.
+
+Favoriten, Besitz und gespeicherte Abend-Auswahlen werden nur ausgeblendet. Nach Leeren des Feldes sind sie wieder sichtbar; der Filter erzeugt keine Bewertungen und verändert weder Profil noch Statistik. Auch die Abend-Liste zeigt die gefilterten Einträge und ihre gefilterte Gesamtzahl. Die Ranggrenze ist eine Browser-/Ansichtseinstellung und verändert keine gespeicherten Spieleabend-Einstellungen.
+
+API: optionaler Queryparameter maxRank bei GET /api/games, /api/player/favorites, /api/player/owned und /api/games/recommendations sowie GET/PUT /api/game-nights/{id} und POST /api/game-nights/{id}/choices/{gameId}. Bei PUT/POST steht die Ranggrenze ebenfalls in der Query; die Bodys behalten ihr bisheriges Format. Ungültige Grenzen ergeben HTTP 400.
+
 ## API-Überblick
 
 - GET /api/games — lokale Suche; q, page, pageSize, sort (rank/rating/name/year), players, maxMinutes, minComplexity, maxComplexity, category, mechanic

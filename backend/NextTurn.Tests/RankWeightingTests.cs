@@ -225,4 +225,45 @@ public class RankWeightingTests
         Assert.InRange(firstDiscoveries / 2000d, .17, .23);
         Assert.InRange(firstTop / 2000d, .77, .83);
     }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(499)]
+    [InlineData(500)]
+    [InlineData(501)]
+    [InlineData(10000)]
+    public void ExplicitRankLimitIsInclusiveAndNeverWidenedByBandFallback(int limit)
+    {
+        var pool = new[]
+        {
+            Game(1, 1),
+            Game(2, 500),
+            Game(3, 501),
+            Game(4, 10000),
+            Game(5, null),
+            Game(6, 0),
+        };
+        var profile = new UserPreferenceProfile
+        {
+            RatedGameIds = [1],
+            CategoryScores = new() { ["Fantasy"] = 10000 },
+        };
+        var result = RecommendationService.SelectRecommendations(
+            pool,
+            pool,
+            profile,
+            3,
+            20,
+            .2,
+            topRankProbability: 0,
+            random: new Random(17),
+            maxRank: limit
+        );
+        var expected = pool.Where(g => g.BggId != 1 && g.BggRank > 0 && g.BggRank <= limit)
+            .Select(g => g.BggId)
+            .Order()
+            .ToArray();
+        Assert.Equal(expected, result.Select(g => g.Id).Order().ToArray());
+        Assert.All(result, g => Assert.InRange(g.BggRank!.Value, 1, limit));
+    }
 }

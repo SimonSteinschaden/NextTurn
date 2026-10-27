@@ -24,6 +24,12 @@ public class GameNightService(IGameNightRepository nights, MatchQualityService m
             throw new ArgumentException("Name und Spieleranzahl prüfen.");
     }
 
+    private static void ValidateRank(int? maxRank)
+    {
+        if (maxRank is < 1 or > 10000)
+            throw new ArgumentException("BGG-Rang muss zwischen 1 und 10.000 liegen.");
+    }
+
     public Task<PagedResult<GameNightDto>> ListAsync(
         string sessionId,
         int page,
@@ -48,15 +54,17 @@ public class GameNightService(IGameNightRepository nights, MatchQualityService m
         Guid id,
         string sessionId,
         int page,
-        CancellationToken ct
+        CancellationToken ct,
+        int? maxRank = null
     )
     {
         Validate(sessionId);
+        ValidateRank(maxRank);
         var night =
             await nights.FindAsync(id, sessionId, ct)
             ?? throw new KeyNotFoundException("Spieleabend nicht gefunden.");
-        var candidates = await nights.CandidatesAsync(night, ct);
-        var selected = await nights.SelectionsAsync(night, Math.Clamp(page, 1, 10000), ct);
+        var candidates = await nights.CandidatesAsync(night, ct, maxRank);
+        var selected = await nights.SelectionsAsync(night, Math.Clamp(page, 1, 10000), ct, maxRank);
         var context = await matches.LoadAsync(sessionId, ct);
         MatchQualityService.Apply(candidates.Games, context);
         MatchQualityService.Apply(selected.Items.Select(s => s.Game).ToList(), context);
@@ -72,12 +80,14 @@ public class GameNightService(IGameNightRepository nights, MatchQualityService m
         Guid id,
         string sessionId,
         GameNightRequest request,
-        CancellationToken ct
+        CancellationToken ct,
+        int? maxRank = null
     )
     {
         Validate(sessionId, request);
+        ValidateRank(maxRank);
         await nights.UpdateAsync(id, sessionId, request, ct);
-        return await BoardAsync(id, sessionId, 1, ct);
+        return await BoardAsync(id, sessionId, 1, ct, maxRank);
     }
 
     public async Task<GameNightBoard> ChooseAsync(
@@ -85,13 +95,15 @@ public class GameNightService(IGameNightRepository nights, MatchQualityService m
         string sessionId,
         int gameId,
         SwipeAction action,
-        CancellationToken ct
+        CancellationToken ct,
+        int? maxRank = null
     )
     {
         Validate(sessionId);
+        ValidateRank(maxRank);
         if (gameId < 1 || !Enum.IsDefined(action))
             throw new ArgumentException("Ungültige Auswahl.");
         await nights.SaveChoiceAsync(id, sessionId, gameId, action, ct);
-        return await BoardAsync(id, sessionId, 1, ct);
+        return await BoardAsync(id, sessionId, 1, ct, maxRank);
     }
 }

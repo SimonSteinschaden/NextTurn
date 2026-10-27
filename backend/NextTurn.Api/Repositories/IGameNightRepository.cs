@@ -16,12 +16,14 @@ public interface IGameNightRepository
     Task UpdateAsync(Guid id, string sessionId, GameNightRequest request, CancellationToken ct);
     Task<(List<BoardGameDto> Games, int Remaining)> CandidatesAsync(
         GameNight night,
-        CancellationToken ct
+        CancellationToken ct,
+        int? maxRank = null
     );
     Task<PagedResult<GameNightSelection>> SelectionsAsync(
         GameNight night,
         int page,
-        CancellationToken ct
+        CancellationToken ct,
+        int? maxRank = null
     );
     Task SaveChoiceAsync(
         Guid id,

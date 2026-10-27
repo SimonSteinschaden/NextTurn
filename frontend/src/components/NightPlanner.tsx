@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { AnimatePresence } from "framer-motion";
+import RankFilter from "./RankFilter";
 import GameCard from "./GameCard";
 import GameDetails from "./GameDetails";
 import MatchQualityBadge from "./MatchQualityBadge";
@@ -22,6 +23,8 @@ import type {
 type Props = {
   sessionId: string;
   revision: number;
+  maxRank?: number;
+  onMaxRankChange: (rank: number | undefined) => void;
   onOwnership: (game: BoardGame, owned: boolean) => Promise<void>;
   onOpenCollection: () => void;
 };
@@ -38,6 +41,8 @@ function message(e: unknown) {
 export default function NightPlanner({
   sessionId,
   revision,
+  maxRank,
+  onMaxRankChange,
   onOwnership,
   onOpenCollection,
 }: Props) {
@@ -50,6 +55,7 @@ export default function NightPlanner({
   const [listPage, setListPage] = useState(1);
   const [listLoading, setListLoading] = useState(true);
   const [board, setBoard] = useState<NightBoard | null>(null);
+  const [boardRank, setBoardRank] = useState<number | undefined>();
   const [creating, setCreating] = useState(false);
   const [page, setPage] = useState(1);
   const [reload, setReload] = useState(0);
@@ -58,8 +64,8 @@ export default function NightPlanner({
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<BoardGame | null>(null);
   const [exitDirection, setExitDirection] = useState<
-    "left" | "right" | "up" | "down"
-  >("left");
+    "left" | "right" | "up" | "down" | "none"
+  >("none");
   const sequence = useRef(0);
   const mutating = useRef(false);
 
@@ -96,10 +102,11 @@ export default function NightPlanner({
     localStorage.setItem(storageKey, nightId);
     const controller = new AbortController();
     const current = ++sequence.current;
-    getNight(nightId, sessionId, page, controller.signal)
+    getNight(nightId, sessionId, page, controller.signal, maxRank)
       .then((result) => {
         if (current === sequence.current && !controller.signal.aborted) {
           setBoard(result);
+          setBoardRank(maxRank);
           setLoading(false);
           const last = Math.max(
             1,
@@ -115,19 +122,33 @@ export default function NightPlanner({
         }
       });
     return () => controller.abort();
-  }, [nightId, creating, sessionId, storageKey, revision, page, reload]);
+  }, [
+    nightId,
+    creating,
+    sessionId,
+    storageKey,
+    revision,
+    page,
+    reload,
+    maxRank,
+  ]);
 
   function accept(result: NightBoard) {
     setBoard(result);
+    setBoardRank(maxRank);
     setPage(1);
     setPlans((old) =>
       old.map((n) => (n.id === result.plan.id ? result.plan : n)),
     );
   }
-  async function mutate(work: () => Promise<void>) {
+  async function mutate(
+    work: () => Promise<void>,
+    direction: "left" | "right" | "up" | "down" | "none" = "none",
+  ) {
     if (mutating.current)
       throw new Error("Die letzte Auswahl wird noch gespeichert.");
     mutating.current = true;
+    setExitDirection(direction);
     sequence.current++;
     setBusy(true);
     setError("");
@@ -159,7 +180,7 @@ export default function NightPlanner({
           setNightId(plan.id);
           setCreating(false);
           setLoading(true);
-        } else accept(await updateNight(nightId, sessionId, settings));
+        } else accept(await updateNight(nightId, sessionId, settings, maxRank));
       });
     } catch (e) {
       setError(message(e));
@@ -167,17 +188,25 @@ export default function NightPlanner({
   }
   async function choose(game: BoardGame, action: SwipeAction) {
     if (!board) return;
-    setExitDirection(
+    await mutate(
+      async () =>
+        accept(
+          await chooseNightGame(
+            board.plan.id,
+            sessionId,
+            game.id,
+            action,
+            maxRank,
+          ),
+        ),
       ({ 0: "left", 1: "right", 2: "up", 3: "down" } as const)[action],
-    );
-    await mutate(async () =>
-      accept(await chooseNightGame(board.plan.id, sessionId, game.id, action)),
     );
   }
   function chooseSafely(game: BoardGame, action: SwipeAction) {
     void choose(game, action).catch((e) => setError(message(e)));
   }
-  const active = !creating && board?.plan.id === nightId ? board : null;
+  const current = !creating && board?.plan.id === nightId ? board : null;
+  const active = current && boardRank === maxRank ? current : null;
   const candidate = active?.candidates[0];
   const disabled = busy || loading;
   return (
@@ -200,6 +229,18 @@ export default function NightPlanner({
         )}
       </div>
       <div className="night-toolbar">
+        <RankFilter
+          value={maxRank}
+          disabled={busy}
+          onChange={(rank) => {
+            sequence.current++;
+            setExitDirection("none");
+            setPage(1);
+            setLoading(!creating && !!nightId);
+            setError("");
+            onMaxRankChange(rank);
+          }}
+        />
         {plans.length > 0 && (
           <label>
             Gespeicherte Spieleabende
@@ -251,35 +292,35 @@ export default function NightPlanner({
           </button>
         )}
       </div>
-      {(creating || active) && (
+      {(creating || current) && (
         <details
           className="night-settings-panel"
-          key={creating ? "new-settings" : active?.plan.id}
+          key={creating ? "new-settings" : current?.plan.id}
           open={creating ? true : undefined}
         >
           <summary>
             {creating
               ? "Neuen Spieleabend anlegen"
-              : active?.plan.players +
+              : current?.plan.players +
                 " Personen" +
-                (active?.plan.date
+                (current?.plan.date
                   ? " · " +
-                    new Date(active.plan.date + "T12:00:00").toLocaleDateString(
-                      "de-DE",
-                    )
+                    new Date(
+                      current.plan.date + "T12:00:00",
+                    ).toLocaleDateString("de-DE")
                   : "") +
                 " · Abend bearbeiten"}
           </summary>
           <form
             className="night-settings filter-panel"
-            key={creating ? "new" : active?.plan.id}
+            key={creating ? "new" : current?.plan.id}
             onSubmit={(e) => void saveSettings(e)}
           >
             <label>
               Name
               <input
                 name="name"
-                defaultValue={creating ? "Spieleabend" : active?.plan.name}
+                defaultValue={creating ? "Spieleabend" : current?.plan.name}
                 required
                 maxLength={120}
                 disabled={disabled}
@@ -290,7 +331,7 @@ export default function NightPlanner({
               <input
                 type="date"
                 name="date"
-                defaultValue={creating ? "" : (active?.plan.date ?? "")}
+                defaultValue={creating ? "" : (current?.plan.date ?? "")}
                 disabled={disabled}
               />
             </label>
@@ -301,7 +342,7 @@ export default function NightPlanner({
                 name="players"
                 min={1}
                 max={100}
-                defaultValue={creating ? 3 : active?.plan.players}
+                defaultValue={creating ? 3 : current?.plan.players}
                 required
                 disabled={disabled}
               />
@@ -339,7 +380,7 @@ export default function NightPlanner({
       )}
       {!active && !creating && (
         <p role="status">
-          {listLoading || loading
+          {listLoading || loading || nightId
             ? "Spieleabend wird geladen …"
             : "Wähle einen Spieleabend oder lege einen neuen an."}
         </p>
@@ -358,10 +399,15 @@ export default function NightPlanner({
               onClick={() => {
                 void mutate(async () =>
                   accept(
-                    await updateNight(nightId, sessionId, {
-                      ...active.plan,
-                      includeUnowned: !active.plan.includeUnowned,
-                    }),
+                    await updateNight(
+                      nightId,
+                      sessionId,
+                      {
+                        ...active.plan,
+                        includeUnowned: !active.plan.includeUnowned,
+                      },
+                      maxRank,
+                    ),
                   ),
                 ).catch((e) => setError(message(e)));
               }}
@@ -401,7 +447,7 @@ export default function NightPlanner({
                       <p>
                         {active.selections.total
                           ? "Deine vorgemerkten Spiele stehen auf der Abend-Liste."
-                          : "Füge Spiele zu deinem Besitz hinzu, passe die Personenzahl an oder beziehe deine Favoriten zum Ausleihen ein."}
+                          : "Füge Spiele zu deinem Besitz hinzu, passe Ranggrenze oder Personenzahl an oder beziehe deine Favoriten zum Ausleihen ein."}
                       </p>
                       <button onClick={onOpenCollection}>
                         Spiele im Besitz ansehen

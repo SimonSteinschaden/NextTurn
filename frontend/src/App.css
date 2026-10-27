@@ -442,7 +442,7 @@ h2 {
 }
 .filter-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 12px;
   margin-top: 17px;
 }
@@ -688,6 +688,11 @@ h2 {
   letter-spacing: 0.4px;
 }
 .game-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  height: fit-content;
+  overflow: auto;
   border: none;
   border-radius: 23px;
   padding: 0;
@@ -962,6 +967,11 @@ h2 {
     padding: 23px;
   }
   .game-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    height: fit-content;
+    overflow: auto;
     max-height: 88vh;
   }
   .empty-discovery {
@@ -1263,4 +1273,32 @@ h2 {
 }
 .night-settings-panel[open] > summary {
   margin-bottom: 8px;
+}
+
+.discover-view > .section-heading {
+  display: block;
+}
+.discovery-filters {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.discovery-filters .rank-control {
+  width: 112px;
+}
+.night-toolbar .rank-control {
+  width: 120px;
+  max-width: none;
+  flex-shrink: 0;
+}
+
+.discovery-filters .players-control {
+  font-size: 12px;
+}
+.discovery-filters input,
+.discovery-filters select {
+  min-height: 42px;
+  padding: 11px 12px;
+  font-size: 14px;
 }

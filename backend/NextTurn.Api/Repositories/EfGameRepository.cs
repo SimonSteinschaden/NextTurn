@@ -65,6 +65,8 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
                     i.SessionId == sessionId && i.BggId == g.BggId && i.IsOwned
                 )
             );
+        if (q.MaxRank.HasValue)
+            query = query.Where(g => g.BggRank > 0 && g.BggRank <= q.MaxRank);
         if (!string.IsNullOrWhiteSpace(q.Q))
         {
             var escaped = q.Q.Trim().Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
@@ -142,7 +144,8 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
         bool exploration,
         int limit,
         CancellationToken ct,
-        int topRankCutoff = 500
+        int topRankCutoff = 500,
+        int? maxRank = null
     )
     {
         var query = Catalog.Where(g =>
@@ -151,6 +154,8 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
                 i.SessionId == sessionId && i.BggId == g.BggId && i.Action != null
             )
         );
+        if (maxRank.HasValue)
+            query = query.Where(g => g.BggRank <= maxRank);
         if (players.HasValue)
             query = query.Where(g =>
                 g.MinPlayers > 0

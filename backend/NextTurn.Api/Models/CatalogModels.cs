@@ -20,6 +20,9 @@ public class CatalogQuery
     public int? Players { get; set; }
 
     [Range(1, 10000)]
+    public int? MaxRank { get; set; }
+
+    [Range(1, 10000)]
     public int? MaxMinutes { get; set; }
 
     [Range(0, 5)]

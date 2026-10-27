@@ -1,7 +1,7 @@
 import MatchQualityBadge from "./MatchQualityBadge";
 import type { BoardGame } from "../api/nextTurnApi";
 import { motion, useMotionValue, useTransform } from "framer-motion";
-type Direction = "left" | "right" | "up" | "down";
+type Direction = "left" | "right" | "up" | "down" | "none";
 type Props = {
   game: BoardGame;
   exitDirection: Direction;
@@ -11,6 +11,7 @@ type Props = {
   onDetails?: () => void;
 };
 const exits = {
+  none: { opacity: 0, x: 0, y: 0, rotate: 0, scale: 1 },
   left: { opacity: 0, x: -450, rotate: -25 },
   right: { opacity: 0, x: 450, rotate: 25 },
   up: { opacity: 0, y: -450, scale: 1.04 },

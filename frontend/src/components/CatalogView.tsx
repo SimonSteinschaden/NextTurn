@@ -1,3 +1,4 @@
+import RankFilter from "./RankFilter";
 import MatchQualityBadge from "./MatchQualityBadge";
 import { useEffect, useState } from "react";
 import { getFacets, searchGames } from "../api/nextTurnApi";
@@ -14,6 +15,8 @@ type Props = {
   onCollectionModeChange?: (mode: "favorites" | "owned") => void;
   onOwnership: (game: BoardGame, owned: boolean) => Promise<void>;
   revision: number;
+  maxRank?: number;
+  onMaxRankChange: (rank: number | undefined) => void;
   onOpen: (game: BoardGame) => void;
   onRate: (game: BoardGame, action: SwipeAction) => Promise<void>;
   onRemove: (game: BoardGame) => Promise<void>;
@@ -24,6 +27,8 @@ export default function CatalogView({
   onCollectionModeChange,
   onOwnership,
   revision,
+  maxRank,
+  onMaxRankChange,
   onOpen,
   onRate,
   onRemove,
@@ -35,6 +40,18 @@ export default function CatalogView({
     pageSize: 24,
     sort: "rank",
   });
+  const filtersActive =
+    maxRank !== undefined ||
+    !!(
+      query.q ||
+      query.players ||
+      query.maxMinutes ||
+      query.minComplexity ||
+      query.maxComplexity ||
+      query.category ||
+      query.mechanic ||
+      query.superOnly
+    );
   const [results, setResults] = useState<PagedResult | null>(null);
   const [facets, setFacets] = useState<{
     categories: string[];
@@ -56,12 +73,13 @@ export default function CatalogView({
       setLoading(true);
       setError("");
       searchGames(
-        { ...query, ownedOnly: owned },
+        { ...query, ownedOnly: owned, maxRank },
         sessionId,
         favorites,
         controller.signal,
       )
         .then((result) => {
+          if (controller.signal.aborted) return;
           setResults(result);
           const last = Math.max(1, Math.ceil(result.total / result.pageSize));
           if (result.page > last) setQuery((q) => ({ ...q, page: last }));
@@ -78,7 +96,7 @@ export default function CatalogView({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, sessionId, favorites, owned, revision]);
+  }, [query, sessionId, favorites, owned, revision, maxRank]);
   function change(values: Partial<CatalogQuery>) {
     setQuery((q) => ({ ...q, ...values, page: 1 }));
   }
@@ -148,6 +166,16 @@ export default function CatalogView({
           />
         </label>
         <div className="filter-grid">
+          <RankFilter
+            value={maxRank}
+            disabled={pending !== null}
+            onChange={(rank) => {
+              setResults(null);
+              setLoading(true);
+              setQuery((q) => ({ ...q, page: 1 }));
+              onMaxRankChange(rank);
+            }}
+          />
           <label>
             Spieler
             <select
@@ -266,11 +294,13 @@ export default function CatalogView({
           ? "Suche läuft …"
           : results?.total
             ? results.total + " Treffer im lokalen Katalog"
-            : owned
-              ? "Noch keine Spiele im Besitz. Markiere deine Spiele in der Suche mit „Besitze ich“."
-              : favorites
-                ? "Noch keine Favoriten. Like ein Spiel, um es hier zu sammeln."
-                : "Keine Spiele für diese Filter gefunden."}
+            : filtersActive
+              ? "Keine Spiele für diese Filter gefunden."
+              : owned
+                ? "Noch keine Spiele im Besitz. Markiere deine Spiele in der Suche mit „Besitze ich“."
+                : favorites
+                  ? "Noch keine Favoriten. Like ein Spiel, um es hier zu sammeln."
+                  : "Keine Spiele für diese Filter gefunden."}
       </p>
       <div className="catalog-grid" aria-busy={loading}>
         {results?.items.map((game) => (

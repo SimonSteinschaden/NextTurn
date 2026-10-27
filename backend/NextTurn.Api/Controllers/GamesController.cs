@@ -69,6 +69,7 @@ public class GamesController(
         [Range(1, 100)] int? players,
         string? categories,
         string? mechanics,
+        [Range(1, 10000)] int? maxRank,
         CancellationToken ct
     )
     {
@@ -80,7 +81,8 @@ public class GamesController(
                 players,
                 Split(categories),
                 Split(mechanics),
-                ct
+                ct,
+                maxRank
             )
         );
     }

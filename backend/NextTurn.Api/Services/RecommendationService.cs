@@ -15,7 +15,8 @@ public class RecommendationService(
         int? players,
         List<string> preferredCategories,
         List<string> preferredMechanics,
-        CancellationToken ct = default
+        CancellationToken ct = default,
+        int? maxRank = null
     )
     {
         IReadOnlyList<GameInteraction> current = string.IsNullOrWhiteSpace(sessionId)
@@ -57,7 +58,8 @@ public class RecommendationService(
             false,
             limit,
             ct,
-            cutoff
+            cutoff,
+            maxRank
         );
         var explore = await games.CandidatesAsync(
             sessionId,
@@ -67,7 +69,8 @@ public class RecommendationService(
             true,
             limit,
             ct,
-            cutoff
+            cutoff,
+            maxRank
         );
         var result = SelectRecommendations(
             preferred,
@@ -80,7 +83,8 @@ public class RecommendationService(
             preferredMechanics,
             cutoff,
             Math.Clamp(configuration.GetValue("Recommendations:TopRankProbability", 0.8), 0, 1),
-            Math.Clamp(configuration.GetValue("Recommendations:RankDecayExponent", 0.65), 0.1, 2)
+            Math.Clamp(configuration.GetValue("Recommendations:RankDecayExponent", 0.65), 0.1, 2),
+            maxRank: maxRank
         );
         MatchQualityService.Apply(result, MatchQualityService.BuildContext(current));
         return result;
@@ -98,7 +102,8 @@ public class RecommendationService(
         int topRankCutoff = 500,
         double topRankProbability = 0.8,
         double rankDecayExponent = 0.65,
-        Random? random = null
+        Random? random = null,
+        int? maxRank = null
     )
     {
         if (count <= 0)
@@ -111,6 +116,7 @@ public class RecommendationService(
         bool Eligible(Game g) =>
             !rated.Contains(g.BggId)
             && g.BggRank is > 0 and <= 10000
+            && (!maxRank.HasValue || g.BggRank <= maxRank)
             && g.DetailsUpdatedAt != null
             && (
                 !players.HasValue
