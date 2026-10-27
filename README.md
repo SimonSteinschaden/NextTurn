@@ -54,7 +54,7 @@ Danach ergänzt ein Hintergrundimport die BGG-Details: maximal 20 IDs pro Anfrag
 
 Der erste vollständige Detailimport benötigt selbst ohne Wartezeiten bei BGG mindestens rund 42 Minuten. Suche und Favoriten funktionieren bereits mit den CSV-Grunddaten. Die Entdecken-Queue verwendet nur Spiele mit importierten Details und bekannter passender Spieleranzahl.
 
-Der aktuelle Stand ist in der App und unter /api/games/status sichtbar. Import:Enabled=false deaktiviert den Hintergrundimport. Import:RefreshDays steuert die Aktualisierungsfrist. Ein aktualisierter CSV-Snapshot wird beim nächsten Start abgeglichen; alte Favoriten bleiben erhalten, auch wenn ein Spiel nicht mehr in den aktuellen Top 10.000 liegt.
+Der aktuelle Importstand ist unter /api/games/status sichtbar. Import:Enabled=false deaktiviert den Hintergrundimport. Import:RefreshDays steuert die Aktualisierungsfrist. Ein aktualisierter CSV-Snapshot wird beim nächsten Start abgeglichen; alte Favoriten bleiben erhalten, auch wenn ein Spiel nicht mehr in den aktuellen Top 10.000 liegt.
 
 ## Bewertungen und Empfehlungen
 

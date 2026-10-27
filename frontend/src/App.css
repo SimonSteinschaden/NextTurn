@@ -157,31 +157,9 @@ h2 {
   color: white;
   box-shadow: 0 3px 8px #254d3e18;
 }
-.local-badge {
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  white-space: nowrap;
-}
-.local-badge > span {
-  width: 7px;
-  height: 7px;
-  background: #76976b;
-  border-radius: 50%;
-}
 .app-main {
   padding: 24px 5% 65px;
   min-height: 75vh;
-}
-.catalog-progress {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #7d8978;
-  margin-bottom: 35px;
 }
 .section-heading {
   display: flex;
@@ -198,58 +176,12 @@ h2 {
   color: #84916b;
   margin-bottom: 13px;
 }
-.section-intro {
-  font-size: 14px;
-  color: #738073;
-  margin-bottom: 0;
-}
 .players-control {
   min-width: 110px;
 }
 .discovery-layout {
-  display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(300px, 440px) minmax(
-      50px,
-      0.5fr
-    );
-  gap: 60px;
-  align-items: center;
-  max-width: 1100px;
+  max-width: 440px;
   margin: 0 auto;
-}
-.discovery-aside {
-  max-width: 270px;
-}
-.aside-number {
-  display: block;
-  font-size: 77px;
-  font-weight: 750;
-  letter-spacing: -5px;
-  line-height: 1;
-  color: #c0cbb2;
-  margin-bottom: 20px;
-}
-.aside-number > span {
-  font-size: 40px;
-  color: #829b6c;
-}
-.discovery-aside h2 {
-  font-size: 30px;
-  line-height: 1.1;
-  max-width: 230px;
-}
-.discovery-aside p {
-  font-size: 14px;
-  line-height: 1.8;
-  color: #728070;
-}
-.aside-note {
-  border-left: 3px solid #b6c4a1;
-  padding: 7px 0 7px 14px;
-  font-size: 12px;
-  line-height: 1.6;
-  color: #70816f;
-  margin: 25px 0;
 }
 .text-button {
   padding: 5px 0;
@@ -324,15 +256,6 @@ h2 {
   font-size: 11px;
   font-weight: 750;
   letter-spacing: 0.5px;
-}
-.recommendation-reason {
-  position: absolute;
-  bottom: 17px;
-  left: 24px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: #d7e7c3;
 }
 .swipe-game-info {
   padding: 0 25px 22px;
@@ -854,19 +777,10 @@ h2 {
 .dialog-body > a {
   font-size: 12px;
 }
-@media (min-width: 1500px) {
-  .discovery-layout {
-    grid-template-columns: 1fr 440px 1fr;
-  }
-}
 @media (max-width: 1100px) {
-  .local-badge {
-    display: none;
-  }
   .discovery-layout {
-    grid-template-columns: 1fr 400px;
-    gap: 45px;
-    max-width: 850px;
+    max-width: 440px;
+    margin: 0 auto;
   }
   .catalog-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -928,20 +842,10 @@ h2 {
   .app-main {
     padding: 20px 20px 35px;
   }
-  .catalog-progress {
-    font-size: 8px;
-    letter-spacing: 0.4px;
-    margin-bottom: 26px;
-    gap: 10px;
-  }
   .section-heading {
     align-items: flex-start;
     gap: 12px;
     margin-bottom: 22px;
-  }
-  .section-intro {
-    font-size: 12px;
-    line-height: 1.6;
   }
   .eyebrow {
     font-size: 8px;
@@ -959,13 +863,6 @@ h2 {
   }
   .players-control select {
     padding: 9px;
-  }
-  .discovery-layout {
-    display: block;
-    max-width: 420px;
-  }
-  .discovery-aside {
-    display: none;
   }
   .swipe-card-wrap,
   .swipe-game-card {
@@ -1083,4 +980,21 @@ h2 {
   width: 145px;
   max-width: 35vw;
   height: auto;
+}
+
+.discover-view > .section-heading {
+  max-width: 440px;
+  margin: 0 auto 24px;
+}
+.discover-view h1 {
+  font-size: clamp(26px, 3vw, 32px);
+  margin-bottom: 0;
+}
+.discover-view .players-control {
+  min-width: 80px;
+  width: 90px;
+  flex-shrink: 0;
+}
+.app-footer {
+  justify-content: flex-end;
 }

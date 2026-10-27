@@ -5,12 +5,11 @@ import CatalogView from "./components/CatalogView";
 import Dashboard from "./components/Dashboard";
 import GameDetails from "./components/GameDetails";
 import {
-  getCatalogStatus,
   getRecommendations,
   removeFavorite,
   submitSwipe,
 } from "./api/nextTurnApi";
-import type { BoardGame, CatalogStatus, SwipeAction } from "./api/nextTurnApi";
+import type { BoardGame, SwipeAction } from "./api/nextTurnApi";
 import "./App.css";
 
 type Tab = "discover" | "search" | "favorites" | "profile";
@@ -29,7 +28,6 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [revision, setRevision] = useState(0);
   const [reload, setReload] = useState(0);
-  const [status, setStatus] = useState<CatalogStatus | null>(null);
   const [selected, setSelected] = useState<BoardGame | null>(null);
   const [exitDirection, setExitDirection] = useState<
     "left" | "right" | "up" | "down"
@@ -44,21 +42,6 @@ function App() {
   const rated = useRef(new Set<number>());
   const savingRef = useRef(false);
   const requestSequence = useRef(0);
-  useEffect(() => {
-    let active = true;
-    const poll = () =>
-      getCatalogStatus()
-        .then((s) => {
-          if (active) setStatus(s);
-        })
-        .catch(() => {});
-    void poll();
-    const timer = setInterval(poll, 15000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, []);
   useEffect(() => {
     const controller = new AbortController();
     const sequence = ++requestSequence.current;
@@ -169,39 +152,13 @@ function App() {
             </button>
           ))}
         </nav>
-        <span className="local-badge">
-          <span /> Dein Spielekompass
-        </span>
       </header>
       <main className="app-main">
-        {status && (
-          <div className="catalog-progress">
-            <span>
-              {status.catalog.total.toLocaleString("de-DE")} Spiele im Katalog
-            </span>
-            <span>
-              {status.catalog.detailed.toLocaleString("de-DE")} mit Details
-              {status.catalog.importRunning ? " · Import läuft" : ""}
-            </span>
-          </div>
-        )}
-        {status?.lastError && (
-          <p className="notice error" role="status">
-            {status.lastError}
-          </p>
-        )}
         {tab === "discover" && (
           <section className="discover-view" aria-labelledby="discover-title">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">
-                  Ein Spiel. Ein Gefühl. Dein nächster Favorit.
-                </p>
                 <h1 id="discover-title">Was kommt auf den Tisch?</h1>
-                <p className="section-intro">
-                  Dein Geschmack gibt die Richtung vor. Neue Genres bleiben im
-                  Spiel.
-                </p>
               </div>
               <label className="players-control">
                 Personen
@@ -220,27 +177,6 @@ function App() {
               </label>
             </div>
             <div className="discovery-layout">
-              <aside className="discovery-aside">
-                <span className="aside-number">
-                  80<span>/20</span>
-                </span>
-                <h2>Vertrautes trifft Neugier.</h2>
-                <p>
-                  Die meisten Vorschläge orientieren sich an deinen Vorlieben.
-                  Rund jeder fünfte Vorschlag öffnet die Tür zu einer neuen
-                  Richtung.
-                </p>
-                <div className="aside-note">
-                  Bereits bewertete oder übersprungene Spiele kommen nicht
-                  erneut in deine Queue.
-                </div>
-                <button
-                  className="text-button"
-                  onClick={() => setTab("profile")}
-                >
-                  Mein Spielerprofil ansehen →
-                </button>
-              </aside>
               <div className="swipe-stage">
                 {error && (
                   <p className="notice error" role="alert">
@@ -253,7 +189,7 @@ function App() {
                       ? "Bewertung wird gespeichert …"
                       : loading
                         ? "Empfehlungen werden sortiert …"
-                        : games.length + " Spiele zum Entdecken"}
+                        : ""}
                   </span>
                   <button
                     disabled={saving || loading}
@@ -288,9 +224,8 @@ function App() {
                             : "Hier ist gerade alles entdeckt."}
                         </h2>
                         <p>
-                          {status?.catalog.detailed === 0
-                            ? "Der Katalog wird noch mit BGG-Details ergänzt. In der Suche findest du schon alle Ranglisteneinträge."
-                            : "Versuche eine andere Spieleranzahl oder lade die Empfehlungen neu."}
+                          Versuche eine andere Spieleranzahl oder lade die
+                          Empfehlungen neu.
                         </p>
                         <button onClick={() => setTab("search")}>
                           Im Katalog stöbern →
@@ -361,7 +296,6 @@ function App() {
         )}
       </main>
       <footer className="app-footer">
-        <span>Ein guter Abend beginnt mit dem richtigen Spiel.</span>
         <a
           href="https://boardgamegeek.com"
           target="_blank"

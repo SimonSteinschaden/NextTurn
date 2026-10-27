@@ -70,9 +70,6 @@ export default function GameCard({
         >
           NOPE
         </motion.div>
-        <span className="recommendation-reason">
-          {game.recommendationReason}
-        </span>
       </div>
       <div className="swipe-game-info">
         <p className="game-year">{game.yearPublished ?? "Jahr unbekannt"}</p>
