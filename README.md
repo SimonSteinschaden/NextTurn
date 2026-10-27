@@ -56,6 +56,22 @@ Der erste vollständige Detailimport benötigt selbst ohne Wartezeiten bei BGG m
 
 Der aktuelle Importstand ist unter /api/games/status sichtbar. Import:Enabled=false deaktiviert den Hintergrundimport. Import:RefreshDays steuert die Aktualisierungsfrist. Ein aktualisierter CSV-Snapshot wird beim nächsten Start abgeglichen; alte Favoriten bleiben erhalten, auch wenn ein Spiel nicht mehr in den aktuellen Top 10.000 liegt.
 
+## Spieldesigner
+
+Designer stehen unter dem Spieltitel in Swipe-Karten, Katalog, Favoriten/Besitz, Spieldetails und der Abend-Liste. Die Daten stammen ausschließlich aus BGG-Links vom Typ boardgamedesigner; Grafiker und Verlage werden nicht als Designer übernommen. Mehrere Autoren bleiben sichtbar. Fehlende Credits und BGG-Platzhalter wie (Uncredited) werden nicht zu erfundenen Namen oder Vorlieben.
+
+Die Migration AddGameDesigners ergänzt Games.Designers (text[]) und DesignersUpdatedAt sowie einen GIN-Index. Bestehende Spieldetails, Bewertungen, Besitz und Abende bleiben erhalten. Der Hintergrundimport ergänzt die Designer auch bei bereits vollständigen Details, priorisiert vorhandene Favoriten und Besitz und setzt nach Neustart bei fehlenden Credits fort. Ein erfolgreicher Abruf ohne Namensangabe gilt als abgerufen und löst keine Endlosschleife aus. Ohne Unterbrechungen benötigt ein kompletter Durchlauf mit 20 IDs und mindestens fünf Sekunden Anfrageabstand rund 42 Minuten.
+
+GET /api/games/status ergänzt catalog.designersDetailed und catalog.designersPending für den aktuellen Katalog. Die erste Zahl zählt abgerufene Designer-Metadaten; bei einzelnen Spielen kann BGG trotzdem keine bekannten Namen liefern. Vorübergehend ungültige XML-/HTML-Antworten werden mit Backoff erneut versucht. Alle Abfragen laufen serverseitig über die bestehende BGG-Anbindung; der Anwendungsschlüssel bleibt ausschließlich in lokalen Backend-Zugangsdaten.
+
+Bestehende Bewertungen berücksichtigen auch nachgeladene Designerangaben automatisch. Designer-Vorlieben werden pro Session aus aktuellen Bewertungen neu gebildet: Like +1, SuperLike +3, Dislike −1, Skip und reiner Besitz 0. Pro Spiel und Name nur einmal; geänderte/entfernte Bewertungen ersetzen die frühere Wirkung. Namen werden getrimmt und ohne Beachtung der Groß-/Kleinschreibung verglichen.
+
+Der Designerbonus ist auf −20 bis +20 Punkte begrenzt: zehn Punkte mal dem mittleren Lernwert der bekannten Co-Autoren. Mehrere Autoren vervielfachen ihn nicht; unbekannte Co-Autoren verdünnen bekannte Signale nicht. Bei der gewichteten Auswahl wirkt dieser Bonus auch dann noch, wenn der übrige Profilfaktor bereits seine Begrenzung erreicht. Die Top-500-Gruppenwahl und der harte Rangfilter gelten weiterhin zuerst. Personalisierte Kandidatenpools berücksichtigen bekannte Designer, Entdeckungspools lassen unbekannten Autoren Raum.
+
+Im Spieleabend wird derselbe begrenzte Bonus zur persönlichen Matchqualität für die Sortierung addiert. Die Match-Prozentzahl selbst behält ihre bisherigen fünf Merkmalsgewichte und getrennten Genreprofile. Der BGG-Rang bleibt eine unveränderte externe Katalogangabe.
+
+Im Profil gibt es das eigene Diagramm Beliebte Spieldesigner. Jedes aktuelle Lieblingsspiel zählt pro Designer einmal; Prozentbasis sind alle Favoriten. Co-Autoren können daher gemeinsam mehr als 100 % ergeben. Fehlende Designerangaben werden als Datenlücke ausgewiesen. Das Statistik-API ergänzt designers als Verteilung; BoardGame-DTOs enthalten designers als Namensliste und das Lernprofil designerScores.
+
 ## Bewertungen und Empfehlungen
 
 - Like und SuperLike erscheinen unter Sammlung → Favoriten.
@@ -63,7 +79,7 @@ Der aktuelle Importstand ist unter /api/games/status sichtbar. Import:Enabled=fa
 - Jede Session besitzt genau einen aktuellen Zustand je Spiel. Identische Wiederholungen sind idempotent; Änderungen erzeugen ein neues Historienereignis und ersetzen den Lernzustand.
 - Favorit entfernen setzt den aktuellen Zustand auf Skip. Das Spiel bleibt damit aus der Entdecken-Queue ausgeschlossen.
 - Alle bereits bewerteten oder übersprungenen Spiele werden serverseitig ausgeschlossen, auch nach Browser-, API- und Datenbankneustart.
-- Lernen berücksichtigt Kategorien, Mechaniken, Komplexität, Spieldauer und Spielerzahl. SuperLikes gewichten stärker, Dislikes negativ; positive Komplexitäts-/Zeitpräferenzen werden nur aus Favoriten gebildet.
+- Lernen berücksichtigt Kategorien, Mechaniken, Designer, Komplexität, Spieldauer und Spielerzahl. SuperLikes gewichten stärker, Dislikes negativ; positive Komplexitäts-/Zeitpräferenzen werden nur aus Favoriten gebildet.
 - Standardmäßig sind 80 % der Queue personalisiert und 20 % Entdeckungen. Für den Entdeckungsanteil werden möglichst unbekannte Genres/Mechaniken gewählt. Das Verhältnis ist über Recommendations:ExplorationRatio (0,1–0,5) konfigurierbar, sofern genügend unbewertete passende Spiele verfügbar sind.
 - Pro Kandidatenabfrage werden standardmäßig höchstens 300 Spiele geladen. Lernabfragen projizieren nur benötigte Merkmale statt kompletter Beschreibungen/Cover. Die Recommendation Engine verwendet Repository-Interfaces und ist unabhängig von EF Core.
 - Nach jeder bestätigten Bewertung wird die Queue neu gewichtet; überholte Antworten werden verworfen.

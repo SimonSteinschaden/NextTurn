@@ -72,10 +72,13 @@ public class StatisticsService(IInteractionRepository interactions)
             var values = games.Select(selector).OfType<double>().ToArray();
             return values.Length == 0 ? null : Math.Round(values.Average(), 2);
         }
-        List<DistributionItem> Distribution(Func<Game, IEnumerable<string>> selector) =>
+        List<DistributionItem> Distribution(
+            Func<Game, IEnumerable<string>> selector,
+            StringComparer? comparer = null
+        ) =>
             games
-                .SelectMany(g => selector(g).Distinct())
-                .GroupBy(s => s)
+                .SelectMany(g => selector(g).Distinct(comparer ?? StringComparer.Ordinal))
+                .GroupBy(s => s, comparer ?? StringComparer.Ordinal)
                 .Select(g => new DistributionItem(
                     g.Key,
                     g.Count(),
@@ -119,6 +122,10 @@ public class StatisticsService(IInteractionRepository interactions)
             PlayTimePreference = duration,
             Categories = Distribution(g => g.Categories),
             Mechanics = Distribution(g => g.Mechanics),
+            Designers = Distribution(
+                g => DesignerPreference.Names(g.Designers),
+                StringComparer.OrdinalIgnoreCase
+            ),
             BestPlayerCounts = bestCounts,
             RecommendedPlayerCounts = PlayerDistribution(g =>
                 g.RecommendedPlayerCounts.Where(n => n is >= 1 and <= 100)
@@ -150,6 +157,7 @@ public class StatisticsService(IInteractionRepository interactions)
                 ["Komplexität"] = games.Count(g => !(g.ComplexityWeight > 0)),
                 ["Kategorien"] = games.Count(g => g.Categories.Length == 0),
                 ["Mechaniken"] = games.Count(g => g.Mechanics.Length == 0),
+                ["Spieldesigner"] = games.Count(g => !DesignerPreference.Names(g.Designers).Any()),
                 ["Community-Bestbesetzung"] = count - knownBest,
                 ["BGG-Spielerempfehlung"] = games.Count(g =>
                     !g.RecommendedPlayerCounts.Any(n => n is >= 1 and <= 100)

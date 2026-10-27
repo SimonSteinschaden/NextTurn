@@ -1,3 +1,4 @@
+import DesignerLine from "./DesignerLine";
 import MatchQualityBadge from "./MatchQualityBadge";
 import { useEffect, useRef, useState } from "react";
 import { getBoardGame } from "../api/nextTurnApi";
@@ -79,6 +80,7 @@ export default function GameDetails({
           {details.gameTypes.join(" · ") || "Spieltyp noch unbekannt"}
         </p>
         <h1 id="detail-name">{details.name}</h1>
+        <DesignerLine designers={details.designers} />
         <MatchQualityBadge quality={details.matchQuality} />
         {details.matchQuality?.matchedGenre && (
           <p className="muted">

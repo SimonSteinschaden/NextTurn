@@ -25,6 +25,7 @@ public class NextTurnDbContext(DbContextOptions<NextTurnDbContext> options) : Db
         games.HasIndex(g => g.YearPublished);
         games.HasIndex(g => g.Name).HasMethod("gin").HasOperators("gin_trgm_ops");
         games.HasIndex(g => g.Categories).HasMethod("gin");
+        games.HasIndex(g => g.Designers).HasMethod("gin");
         games.HasIndex(g => g.Mechanics).HasMethod("gin");
         games.HasIndex(g => g.DetailsUpdatedAt);
         model.Entity<PlayerSession>().HasKey(s => s.Id);

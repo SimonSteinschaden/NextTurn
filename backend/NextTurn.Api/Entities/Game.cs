@@ -21,6 +21,8 @@ public class Game
     public int? MaxPlayTime { get; set; }
     public int? MinAge { get; set; }
     public double? ComplexityWeight { get; set; }
+    public string[] Designers { get; set; } = [];
+    public DateTimeOffset? DesignersUpdatedAt { get; set; }
     public string[] Categories { get; set; } = [];
     public string[] Mechanics { get; set; } = [];
     public string[] GameTypes { get; set; } = [];

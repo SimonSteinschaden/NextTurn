@@ -41,6 +41,7 @@ public class UserPreferenceService(IInteractionRepository interactions, IGameRep
         var profile = new UserPreferenceProfile
         {
             SessionId = sessionId,
+            DesignerScores = DesignerPreference.Learn(current),
             TotalSwipes = current.Count(i => i.Action.HasValue && i.Action != SwipeAction.Skip),
             RatedGameIds = current
                 .Where(i => i.Action.HasValue)

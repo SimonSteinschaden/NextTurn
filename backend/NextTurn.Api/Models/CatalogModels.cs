@@ -42,7 +42,15 @@ public class CatalogQuery
 
 public record PagedResult<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize);
 
-public record CatalogStatus(int Total, int Detailed, int Failed, int Pending, bool ImportRunning);
+public record CatalogStatus(
+    int Total,
+    int Detailed,
+    int Failed,
+    int Pending,
+    bool ImportRunning,
+    int DesignersDetailed = 0,
+    int DesignersPending = 0
+);
 
 public record Facets(string[] Categories, string[] Mechanics);
 
@@ -58,6 +66,7 @@ public class PlayerStatistics
     public Dictionary<string, int> MissingData { get; set; } = new();
     public List<DistributionItem> Categories { get; set; } = [];
     public List<DistributionItem> Mechanics { get; set; } = [];
+    public List<DistributionItem> Designers { get; set; } = [];
     public List<DistributionItem> Complexity { get; set; } = [];
     public List<DistributionItem> BestPlayerCounts { get; set; } = [];
     public PlayerCountPreference PreferredPlayers { get; set; } = new([], 0, 0, null, true);

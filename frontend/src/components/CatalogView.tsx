@@ -1,3 +1,4 @@
+import DesignerLine from "./DesignerLine";
 import RankFilter from "./RankFilter";
 import MatchQualityBadge from "./MatchQualityBadge";
 import { useEffect, useState } from "react";
@@ -326,6 +327,7 @@ export default function CatalogView({
               </div>
               <div className="card-info">
                 <h2>{game.name}</h2>
+                <DesignerLine designers={game.designers} />
                 <MatchQualityBadge quality={game.matchQuality} compact />
                 <p>
                   {game.yearPublished ?? "Jahr unbekannt"} · ★{" "}

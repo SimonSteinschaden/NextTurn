@@ -51,6 +51,13 @@ namespace NextTurn.Api.Data.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.PrimitiveCollection<string[]>("Designers")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<DateTimeOffset?>("DesignersUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("DetailsUpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -116,6 +123,10 @@ namespace NextTurn.Api.Data.Migrations
                     b.HasIndex("Categories");
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Categories"), "gin");
+
+                    b.HasIndex("Designers");
+
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Designers"), "gin");
 
                     b.HasIndex("DetailsUpdatedAt");
 

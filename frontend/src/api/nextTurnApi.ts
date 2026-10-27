@@ -14,6 +14,7 @@ export type BoardGame = {
   id: number;
   bggRank?: number | null;
   name: string;
+  designers?: string[];
   description?: string | null;
   thumbnail: string;
   image: string;
@@ -43,6 +44,7 @@ export type UserPreferenceProfile = {
   sessionId: string;
   categoryScores: Record<string, number>;
   mechanicScores: Record<string, number>;
+  designerScores?: Record<string, number>;
   preferredComplexity: number;
   totalSwipes: number;
   ratedGameIds: number[];
@@ -75,6 +77,8 @@ export type CatalogStatus = {
     failed: number;
     pending: number;
     importRunning: boolean;
+    designersDetailed?: number;
+    designersPending?: number;
   };
   lastError?: string | null;
 };
@@ -92,6 +96,7 @@ export type PlayerStatistics = {
   missingData: Record<string, number>;
   categories: DistributionItem[];
   mechanics: DistributionItem[];
+  designers: DistributionItem[];
   complexity: DistributionItem[];
   bestPlayerCounts: DistributionItem[];
   preferredPlayers: {

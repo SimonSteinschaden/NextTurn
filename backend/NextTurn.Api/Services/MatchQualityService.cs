@@ -22,6 +22,8 @@ public class MatchQualityService(IInteractionRepository interactions)
         internal Dictionary<string, List<Reference>> Genres { get; } =
             new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<int, SwipeAction> Actions { get; } = [];
+        public Dictionary<string, double> DesignerScores { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
         public HashSet<int> OwnedGameIds { get; } = [];
     }
 
@@ -44,10 +46,12 @@ public class MatchQualityService(IInteractionRepository interactions)
     public static Context BuildContext(IEnumerable<GameInteraction> interactions)
     {
         var context = new Context();
+        var rows = interactions.ToList();
+        foreach (var (name, score) in DesignerPreference.Learn(rows))
+            context.DesignerScores[name] = score;
         // Current state per game, including changed/removed favorites. History is never counted twice.
         foreach (
-            var current in interactions
-                .GroupBy(i => i.BggId)
+            var current in rows.GroupBy(i => i.BggId)
                 .Select(group => group.MaxBy(i => i.UpdatedAt)!)
         )
         {

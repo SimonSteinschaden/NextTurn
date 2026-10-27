@@ -121,7 +121,16 @@ public class BggService(
                             null,
                             response.StatusCode
                         );
-                    var games = ParseBoardGamesXml(await response.Content.ReadAsStringAsync(ct));
+                    List<BoardGameDto> games;
+                    try
+                    {
+                        games = ParseBoardGamesXml(await response.Content.ReadAsStringAsync(ct));
+                    }
+                    catch (System.Xml.XmlException) when (attempt < 4)
+                    {
+                        nextRequest = DateTimeOffset.UtcNow.AddSeconds(5 * Math.Pow(2, attempt));
+                        continue;
+                    }
                     foreach (var game in games)
                         cache.Set("bgg-game-" + game.Id, game, TimeSpan.FromHours(24));
                     return games;
@@ -138,6 +147,8 @@ public class BggService(
     public static List<BoardGameDto> ParseBoardGamesXml(string text)
     {
         var xml = XDocument.Parse(text);
+        if (xml.Root?.Name.LocalName != "items")
+            throw new System.Xml.XmlException("Unerwartetes Format der BGG-Metadaten.");
         return xml.Descendants("item")
             .Select(item =>
             {
@@ -184,6 +195,9 @@ public class BggService(
                             ?.Attribute("value")
                             ?.Value
                     ),
+                    Designers = DesignerPreference
+                        .Names(Links(item, "boardgamedesigner"))
+                        .ToArray(),
                     Categories = Links(item, "boardgamecategory"),
                     Mechanics = Links(item, "boardgamemechanic"),
                     GameTypes = item.Attribute("type") is { } type ? [type.Value] : [],

@@ -1316,3 +1316,36 @@ h2 {
   line-height: 1.5;
   color: #7a8970;
 }
+
+.designer-line {
+  display: block;
+  color: #74826b;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 400;
+  margin: -4px 0 13px;
+  overflow-wrap: anywhere;
+}
+.swipe-game-info h2 {
+  margin-bottom: 8px;
+}
+.swipe-game-info .designer-line {
+  color: #b9c9b1;
+  font-size: 12px;
+  margin: 0 0 16px;
+}
+.card-info .designer-line {
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+.dialog-body > .designer-line {
+  font-size: 14px;
+  margin: -4px 0 18px;
+}
+.shortlist-open .designer-line {
+  font-size: 10px;
+  margin: 4px 0 0;
+}
+.chart-grid > .chart-panel:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { AnimatePresence } from "framer-motion";
+import DesignerLine from "./DesignerLine";
 import RankFilter from "./RankFilter";
 import GameCard from "./GameCard";
 import GameDetails from "./GameDetails";
@@ -496,6 +497,7 @@ export default function NightPlanner({
                     )}
                     <span>
                       <strong>{game.name}</strong>
+                      <DesignerLine designers={game.designers} />
                       <small>
                         {action === 2 ? "★ Top-Wahl · " : ""}
                         {game.isOwned ? "Im Besitz" : "Zum Ausleihen"}

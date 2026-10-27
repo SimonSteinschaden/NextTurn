@@ -16,7 +16,6 @@ public class OwnershipMigrationTests(PostgresFixture fixture) : IClassFixture<Po
         // This fixture owns a fresh random test database; never downgrade the user's database.
         await using var db = fixture.CreateDb();
         var migrator = db.GetService<IMigrator>();
-        await migrator.MigrateAsync("20261027125016_InitialCatalog");
         await new EfGameRepository(db).SeedAsync(
             [
                 new BoardGameRankEntry
@@ -28,6 +27,7 @@ public class OwnershipMigrationTests(PostgresFixture fixture) : IClassFixture<Po
             ],
             default
         );
+        await migrator.MigrateAsync("20261027125016_InitialCatalog");
         const string session = "before-ownership";
         var time = DateTimeOffset.UtcNow;
         await db.Database.ExecuteSqlInterpolatedAsync(

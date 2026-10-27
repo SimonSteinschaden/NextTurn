@@ -39,6 +39,12 @@ public class RecommendationService(
             .Concat(preferredMechanics)
             .Distinct()
             .ToArray();
+        var designers = profile
+            .DesignerScores.Where(p => p.Value > 0)
+            .OrderByDescending(p => p.Value)
+            .Take(5)
+            .Select(p => p.Key)
+            .ToArray();
         var limit = Math.Clamp(
             configuration.GetValue("Recommendations:CandidateLimit", 300),
             40,
@@ -59,7 +65,8 @@ public class RecommendationService(
             limit,
             ct,
             cutoff,
-            maxRank
+            maxRank,
+            designers
         );
         var explore = await games.CandidatesAsync(
             sessionId,
@@ -70,7 +77,8 @@ public class RecommendationService(
             limit,
             ct,
             cutoff,
-            maxRank
+            maxRank,
+            designers
         );
         var result = SelectRecommendations(
             preferred,
@@ -131,7 +139,11 @@ public class RecommendationService(
         {
             var categoryScore = g.Categories.Sum(c => profile.CategoryScores.GetValueOrDefault(c));
             var mechanicScore = g.Mechanics.Sum(m => profile.MechanicScores.GetValueOrDefault(m));
-            var score = categoryScore * 25 + mechanicScore * 20 + (g.AverageRating ?? 0) * 2;
+            var score =
+                categoryScore * 25
+                + mechanicScore * 20
+                + (g.AverageRating ?? 0) * 2
+                + DesignerPreference.Score(g.Designers, profile.DesignerScores);
             if (categories != null)
                 score += g.Categories.Count(categories.Contains) * 25;
             if (mechanics != null)
@@ -162,8 +174,14 @@ public class RecommendationService(
         var weights = remaining.ToDictionary(
             g => g.BggId,
             g =>
-                Math.Exp(Math.Clamp(scores[g.BggId] / 100d, -4, 4))
-                / Math.Pow(g.BggRank!.Value, rankDecayExponent)
+            {
+                var designerBonus = DesignerPreference.Score(g.Designers, profile.DesignerScores);
+                // Keep creator preference effective even after a large genre score reaches its cap.
+                return Math.Exp(
+                        Math.Clamp((scores[g.BggId] - designerBonus) / 100d, -4, 4)
+                            + designerBonus / 100d
+                    ) / Math.Pow(g.BggRank!.Value, rankDecayExponent);
+            }
         );
         var positiveCategories = profile
             .CategoryScores.Where(p => p.Value > 0)
@@ -175,9 +193,14 @@ public class RecommendationService(
             .Select(p => p.Key)
             .Concat(mechanics ?? [])
             .ToHashSet();
+        var positiveDesigners = profile
+            .DesignerScores.Where(p => p.Value > 0)
+            .Select(p => p.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         int Familiarity(Game g) =>
             g.Categories.Count(positiveCategories.Contains)
-            + g.Mechanics.Count(positiveMechanics.Contains);
+            + g.Mechanics.Count(positiveMechanics.Contains)
+            + DesignerPreference.Names(g.Designers).Count(positiveDesigners.Contains);
         var size = Math.Min(count, remaining.Count);
         var discoveryCount = (int)Math.Ceiling(size * Math.Clamp(explorationRatio, 0, 1));
         // Randomize discovery positions: the client reranks after every swipe, so a fixed fifth slot would never become the next card.

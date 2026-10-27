@@ -5,6 +5,8 @@ public class UserPreferenceProfile
     public string SessionId { get; set; } = "";
     public Dictionary<string, double> CategoryScores { get; set; } = new();
     public Dictionary<string, double> MechanicScores { get; set; } = new();
+    public Dictionary<string, double> DesignerScores { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
     public double PreferredComplexity { get; set; }
     public double? PreferredPlayTime { get; set; }
     public double? PreferredPlayerCount { get; set; }

@@ -13,6 +13,8 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
         {
             BggId = g.BggId,
             Name = g.Name,
+            Designers = g.Designers,
+            DesignersUpdatedAt = g.DesignersUpdatedAt,
             YearPublished = g.YearPublished,
             BggRank = g.BggRank,
             ImageUrl = g.ImageUrl,
@@ -145,7 +147,8 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
         int limit,
         CancellationToken ct,
         int topRankCutoff = 500,
-        int? maxRank = null
+        int? maxRank = null,
+        string[]? preferredDesigners = null
     )
     {
         var query = Catalog.Where(g =>
@@ -163,17 +166,23 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
                 && g.MinPlayers <= players
                 && g.MaxPlayers >= players
             );
+        var designers = preferredDesigners ?? [];
         IOrderedQueryable<Game> OrderBand(IQueryable<Game> band)
         {
-            if (categories.Length == 0 && mechanics.Length == 0)
+            if (categories.Length == 0 && mechanics.Length == 0 && designers.Length == 0)
                 return band.OrderBy(g => EF.Functions.Random());
             if (exploration)
                 return band.OrderBy(g =>
-                        g.Categories.Any(c => categories.Contains(c))
-                        || g.Mechanics.Any(m => mechanics.Contains(m))
+                        (
+                            g.Categories.Any(c => categories.Contains(c))
+                            || g.Mechanics.Any(m => mechanics.Contains(m))
+                                ? 1
+                                : 0
+                        ) + (g.Designers.Any(d => designers.Contains(d)) ? 1 : 0)
                     )
                     .ThenBy(g => EF.Functions.Random());
-            return band.OrderByDescending(g =>
+            return band.OrderByDescending(g => g.Designers.Any(d => designers.Contains(d)))
+                .ThenByDescending(g =>
                     g.Categories.Any(c => categories.Contains(c))
                     || g.Mechanics.Any(m => mechanics.Contains(m))
                 )
@@ -219,9 +228,24 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
     }
 
     public Task<List<int>> ImportIdsAsync(DateTimeOffset staleBefore, CancellationToken ct) =>
-        Catalog
-            .Where(g => g.DetailsUpdatedAt == null || g.DetailsUpdatedAt < staleBefore)
-            .OrderBy(g => g.LastImportAttemptAt != null)
+        db
+            .Games.AsNoTracking()
+            .Where(g =>
+                g.DetailsUpdatedAt == null
+                || g.DetailsUpdatedAt < staleBefore
+                || g.DesignersUpdatedAt == null
+            )
+            .OrderByDescending(g =>
+                db.Interactions.Any(i =>
+                    i.BggId == g.BggId
+                    && (
+                        i.IsOwned
+                        || i.Action == SwipeAction.Like
+                        || i.Action == SwipeAction.SuperLike
+                    )
+                )
+            )
+            .ThenBy(g => g.LastImportAttemptAt != null)
             .ThenBy(g => g.BggRank)
             .Select(g => g.BggId)
             .ToListAsync(ct);
@@ -244,6 +268,8 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
                 continue;
             }
             game.Name = dto.Name;
+            game.Designers = DesignerPreference.Names(dto.Designers).ToArray();
+            game.DesignersUpdatedAt = DateTimeOffset.UtcNow;
             game.YearPublished = dto.YearPublished;
             game.Description = dto.Description;
             game.ImageUrl = dto.Image;
@@ -275,6 +301,15 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
         var total = await Catalog.CountAsync(ct);
         var detailed = await Catalog.CountAsync(g => g.DetailsUpdatedAt != null, ct);
         var failed = await Catalog.CountAsync(g => g.ImportError != null, ct);
-        return new(total, detailed, failed, total - detailed, running);
+        var designersDetailed = await Catalog.CountAsync(g => g.DesignersUpdatedAt != null, ct);
+        return new(
+            total,
+            detailed,
+            failed,
+            total - detailed,
+            running,
+            designersDetailed,
+            total - designersDetailed
+        );
     }
 }

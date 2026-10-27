@@ -68,8 +68,14 @@ public class GameNightService(IGameNightRepository nights, MatchQualityService m
         var context = await matches.LoadAsync(sessionId, ct);
         MatchQualityService.Apply(candidates.Games, context);
         MatchQualityService.Apply(selected.Items.Select(s => s.Game).ToList(), context);
+        foreach (var game in candidates.Games)
+            game.RecommendationScore = Math.Round(
+                (game.MatchQuality?.Percentage ?? 0)
+                    + DesignerPreference.Score(game.Designers, context.DesignerScores),
+                2
+            );
         var queue = candidates
-            .Games.OrderByDescending(g => g.MatchQuality?.Percentage ?? -1)
+            .Games.OrderByDescending(g => g.RecommendationScore)
             .ThenBy(g => g.BggRank ?? int.MaxValue)
             .Take(20)
             .ToList();

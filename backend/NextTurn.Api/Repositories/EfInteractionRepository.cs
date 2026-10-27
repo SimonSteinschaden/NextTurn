@@ -21,6 +21,7 @@ public class EfInteractionRepository(NextTurnDbContext db) : IInteractionReposit
                 Game = new Game
                 {
                     BggId = i.Game.BggId,
+                    Designers = i.Game.Designers,
                     BggRank = i.Game.BggRank,
                     Categories = i.Game.Categories,
                     Mechanics = i.Game.Mechanics,

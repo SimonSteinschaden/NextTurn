@@ -160,6 +160,7 @@ export default function Dashboard({
       <div className="chart-grid">
         <Bars title="Deine Genres & Themen" items={data.categories} />
         <Bars title="Beliebte Mechaniken" items={data.mechanics} />
+        <Bars title="Beliebte Spieldesigner" items={data.designers ?? []} />
         <Bars title="Komplexitätsprofil" items={data.complexity} />
         <Bars title="Spieldauer deiner Favoriten" items={data.playTimes} />
         <Bars

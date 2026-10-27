@@ -10,6 +10,7 @@ public static class GameMapping
         {
             Id = g.BggId,
             Name = g.Name,
+            Designers = DesignerPreference.Names(g.Designers).ToArray(),
             BggRank = g.BggRank,
             YearPublished = g.YearPublished == 0 ? null : g.YearPublished,
             Description = g.Description,

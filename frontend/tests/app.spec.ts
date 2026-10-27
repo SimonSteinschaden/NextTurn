@@ -7,6 +7,12 @@ import type {
 const games = [1, 2, 3].map((id) => ({
   id,
   name: "Fixture Game " + id,
+  designers:
+    id === 1
+      ? ["Fixture Designer A", "Fixture Designer B"]
+      : id === 2
+        ? ["Fixture Designer A"]
+        : [],
   bggRank: id,
   thumbnail: "",
   image: "",
@@ -159,6 +165,20 @@ test.beforeEach(async ({ page }) => {
             { name: "Fantasy", count: favorites.length, percentage: 100 },
           ],
           mechanics: [],
+          designers: ["Fixture Designer A", "Fixture Designer B"]
+            .map((name) => {
+              const count = favorites.filter((g) =>
+                g.designers.includes(name),
+              ).length;
+              return {
+                name,
+                count,
+                percentage: favorites.length
+                  ? (100 * count) / favorites.length
+                  : 0,
+              };
+            })
+            .filter((d) => d.count > 0),
           complexity: [],
           bestPlayerCounts: favorites.length
             ? [{ name: "3", count: favorites.length, percentage: 100 }]
@@ -822,6 +842,94 @@ test("profile shows community best counts and duration tendencies instead of ran
   await page.getByRole("button", { name: "Profil", exact: true }).click();
   await expect(players.locator("strong")).toHaveText("Noch offen");
   await expect(duration.locator("strong")).toHaveText("Noch offen");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+});
+
+test("designers appear below titles across cards and details and have their own statistics panel", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const swipeCard = page.locator(".swipe-game-card");
+  await expect(swipeCard.locator(".designer-line")).toHaveText(
+    "von Fixture Designer A, Fixture Designer B",
+  );
+  const layout = await swipeCard.evaluate((card) => {
+    const title = card.querySelector("h2")!;
+    const credit = card.querySelector(".designer-line")!;
+    return {
+      below:
+        credit.getBoundingClientRect().top >=
+        title.getBoundingClientRect().bottom,
+      smaller:
+        parseFloat(getComputedStyle(credit).fontSize) <
+        parseFloat(getComputedStyle(title).fontSize),
+    };
+  });
+  expect(layout).toEqual({ below: true, smaller: true });
+  await page.getByRole("button", { name: "Like", exact: true }).click();
+  await expect(swipeCard.locator(".designer-line")).toHaveText(
+    "von Fixture Designer A",
+  );
+  await page.getByRole("button", { name: "Like", exact: true }).click();
+  await expect(swipeCard.locator(".designer-line")).toHaveText(
+    "Spieldesign unbekannt",
+  );
+  await page.getByRole("button", { name: "Sammlung", exact: true }).click();
+  const first = page
+    .locator(".catalog-card")
+    .filter({
+      has: page.getByRole("heading", { name: "Fixture Game 1", exact: true }),
+    });
+  await expect(first.locator(".designer-line")).toHaveText(
+    "von Fixture Designer A, Fixture Designer B",
+  );
+  await first
+    .getByRole("button", {
+      name: "Fixture Game 1 – Details öffnen",
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole("dialog").locator(".designer-line")).toHaveText(
+    "von Fixture Designer A, Fixture Designer B",
+  );
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Profil", exact: true }).click();
+  const panel = page
+    .locator(".chart-panel")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Beliebte Spieldesigner",
+        exact: true,
+      }),
+    });
+  await expect(
+    panel.locator(".stat-bar").filter({ hasText: "Fixture Designer A" }),
+  ).toContainText("100%");
+  await expect(
+    panel.locator(".stat-bar").filter({ hasText: "Fixture Designer B" }),
+  ).toContainText("50%");
+  await page.getByRole("button", { name: "Sammlung", exact: true }).click();
+  await first.getByRole("button", { name: "Besitze ich", exact: true }).click();
+  await expect(
+    first.getByRole("button", { name: "✓ Im Besitz", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Spieleabend planen", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Spieleabend anlegen", exact: true })
+    .click();
+  await expect(swipeCard.locator(".designer-line")).toHaveText(
+    "von Fixture Designer A, Fixture Designer B",
+  );
+  await page.getByRole("button", { name: "Vormerken", exact: true }).click();
+  await expect(page.locator(".shortlist-card .designer-line")).toHaveText(
+    "von Fixture Designer A, Fixture Designer B",
+  );
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,

@@ -1,3 +1,4 @@
+import DesignerLine from "./DesignerLine";
 import MatchQualityBadge from "./MatchQualityBadge";
 import type { BoardGame } from "../api/nextTurnApi";
 import { motion, useMotionValue, useTransform } from "framer-motion";
@@ -79,6 +80,7 @@ export default function GameCard({
       <div className="swipe-game-info">
         <p className="game-year">{game.yearPublished ?? "Jahr unbekannt"}</p>
         <h2>{game.name}</h2>
+        <DesignerLine designers={game.designers} />
         <div className="swipe-facts">
           <span>
             ♟ {game.minPlayers ?? "?"}–{game.maxPlayers ?? "?"}
