@@ -410,4 +410,84 @@ public class PostgresTests(PostgresFixture fixture) : IClassFixture<PostgresFixt
         await matches.ApplyAsync([details], session, default);
         Assert.Null(details.MatchQuality!.Percentage);
     }
+
+    [Fact]
+    public async Task IndependentGenreMatchesAreConsistentAcrossSearchDiscoveryDetailsAndNight()
+    {
+        await using var db = fixture.CreateDb();
+        var games = new EfGameRepository(db);
+        var interactions = new EfInteractionRepository(db);
+        var ids = new[] { 62001, 62002, 62003, 62004 };
+        await games.SeedAsync(
+            ids.Select((id, index) => Rank(id, index + 1, "Genre profile " + id)).ToArray(),
+            default
+        );
+        var details = ids.Select(id =>
+            {
+                var g = Detail(id, "Genre profile " + id);
+                if (id % 2 == 0)
+                {
+                    g.Categories = ["Economic"];
+                    g.Mechanics = ["Auction"];
+                    g.Complexity = 1;
+                    g.MinPlayTime = 20;
+                    g.MaxPlayTime = 30;
+                    g.MinPlayers = 4;
+                    g.MaxPlayers = 6;
+                }
+                return g;
+            })
+            .ToArray();
+        await games.SaveDetailsAsync(details, ids, null, default);
+        var session = "genre-" + Guid.NewGuid().ToString("N");
+        await interactions.SaveAsync(session, 62001, SwipeAction.Like, default);
+        await interactions.SaveAsync(session, 62002, SwipeAction.SuperLike, default);
+        var matches = new MatchQualityService(interactions);
+        var search = await games.SearchAsync(
+            new() { Q = "Genre profile" },
+            session,
+            false,
+            default
+        );
+        await matches.ApplyAsync(search.Items, session, default);
+        var targets = search.Items.Where(g => g.Id is 62003 or 62004).ToDictionary(g => g.Id);
+        Assert.Equal(100, targets[62003].MatchQuality!.Percentage);
+        Assert.Equal(100, targets[62004].MatchQuality!.Percentage);
+        Assert.Equal("Fantasy", targets[62003].MatchQuality!.MatchedGenre);
+        Assert.Equal("Economic", targets[62004].MatchQuality!.MatchedGenre);
+        foreach (var id in new[] { 62003, 62004 })
+        {
+            var dto = GameMapping.ToDto((await games.FindAsync(id, default))!);
+            await matches.ApplyAsync([dto], session, default);
+            Assert.Equal(targets[id].MatchQuality, dto.MatchQuality);
+            await interactions.SetOwnershipAsync(session, id, true, default);
+        }
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>())
+            .Build();
+        var queue = await new RecommendationService(
+            games,
+            interactions,
+            config
+        ).GetRecommendationsAsync(session, 4, [], []);
+        Assert.Equal(2, queue.Count);
+        Assert.All(queue, g => Assert.Equal(targets[g.Id].MatchQuality, g.MatchQuality));
+        var nights = new GameNightService(new EfGameNightRepository(db), matches);
+        var plan = await nights.CreateAsync(session, new() { Players = 4 }, default);
+        var board = await nights.BoardAsync(plan.Id, session, 1, default);
+        Assert.Equal(2, board.Candidates.Count);
+        Assert.All(board.Candidates, g => Assert.Equal(targets[g.Id].MatchQuality, g.MatchQuality));
+        var selected = await nights.ChooseAsync(plan.Id, session, 62003, SwipeAction.Like, default);
+        Assert.Equal(
+            targets[62003].MatchQuality,
+            Assert.Single(selected.Selections.Items).Game.MatchQuality
+        );
+        await interactions.SaveAsync(session, 62001, SwipeAction.Skip, default);
+        var changed = await matches.LoadAsync(session, default);
+        var fantasy = MatchQualityService.Calculate(targets[62003], changed);
+        var economic = MatchQualityService.Calculate(targets[62004], changed);
+        Assert.Null(fantasy.MatchedGenre);
+        Assert.Equal("Economic", economic.MatchedGenre);
+        Assert.Equal(100, economic.Percentage);
+    }
 }

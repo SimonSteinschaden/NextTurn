@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
-import type { GameNight, GameNightSettings } from "../src/api/nextTurnApi";
+import type {
+  GameMatchQuality,
+  GameNight,
+  GameNightSettings,
+} from "../src/api/nextTurnApi";
 const games = [1, 2, 3].map((id) => ({
   id,
   name: "Fixture Game " + id,
@@ -271,8 +275,9 @@ test("a failed swipe keeps the game and displays a persistent error", async ({
 test("match indicator displays the API index and its data limitations", async ({
   page,
 }) => {
-  let quality = {
-    percentage: 78 as number | null,
+  let quality: GameMatchQuality = {
+    percentage: 78,
+    matchedGenre: "Fantasy",
     comparedFavorites: 2,
     availableFavorites: 2,
     featureCoveragePercentage: 100,
@@ -295,6 +300,10 @@ test("match indicator displays the API index and its data limitations", async ({
   await expect(page.locator(".swipe-cover .match-quality")).toContainText(
     "vorläufig",
   );
+  await expect(page.locator(".swipe-cover .match-quality")).toHaveAttribute(
+    "title",
+    /Genreprofil „Fantasy“/,
+  );
   quality = {
     percentage: null,
     comparedFavorites: 0,
@@ -313,6 +322,7 @@ test("match indicator displays the API index and its data limitations", async ({
   );
   quality = {
     percentage: 92,
+    matchedGenre: "Economic",
     comparedFavorites: 8,
     availableFavorites: 8,
     featureCoveragePercentage: 100,
@@ -327,6 +337,21 @@ test("match indicator displays the API index and its data limitations", async ({
   await expect(page.locator(".swipe-cover .match-quality")).not.toContainText(
     "vorläufig",
   );
+  await expect(page.locator(".swipe-cover .match-quality")).toHaveAttribute(
+    "title",
+    /Genreprofil „Economic“/,
+  );
+  await page.route(
+    (url) => url.pathname === "/api/games/1",
+    (route) => route.fulfill({ json: { ...games[0], matchQuality: quality } }),
+  );
+  await page.getByRole("button", { name: "Spieldetails ansehen" }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Passendes Genreprofil: Economic",
+  );
+  await expect(
+    page.getByRole("dialog").locator(".match-quality"),
+  ).toHaveAttribute("title", /Andere Genreprofile senken diesen Wert nicht/);
 });
 
 test("ownership and favorites stay independent and saved nights default to owned games", async ({

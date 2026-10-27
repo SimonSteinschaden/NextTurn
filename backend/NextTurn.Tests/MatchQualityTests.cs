@@ -96,7 +96,7 @@ public class MatchQualityTests
         liked.PlayingTime = null;
         liked.MinPlayers = null;
         liked.MaxPlayers = null;
-        var other = Favorite(2, "Economic", "Dice Rolling");
+        var other = Favorite(2, "Fantasy", "Dice Rolling");
         other.ComplexityWeight = null;
         other.MinPlayTime = null;
         other.MaxPlayTime = null;
@@ -107,7 +107,13 @@ public class MatchQualityTests
             Rated(liked, SwipeAction.SuperLike),
             Rated(other),
         ]);
-        Assert.Equal(75, MatchQualityService.Calculate(Candidate(), context).Percentage);
+        // Same-genre comparisons score 100% and 50%; the SuperLike counts threefold.
+        Assert.Equal(88, MatchQualityService.Calculate(Candidate(), context).Percentage);
+        var reversed = MatchQualityService.BuildContext([
+            Rated(liked),
+            Rated(other, SwipeAction.SuperLike),
+        ]);
+        Assert.Equal(63, MatchQualityService.Calculate(Candidate(), reversed).Percentage);
     }
 
     [Fact]
@@ -190,7 +196,7 @@ public class MatchQualityTests
     }
 
     [Fact]
-    public void PartialTagOverlapUsesCosineAndIsBounded()
+    public void AdditionalGenresDoNotDiluteKnownGenreAndPartialMechanicsRemainBounded()
     {
         var candidate = Candidate();
         candidate.Categories = ["Fantasy", "Economic"];
@@ -199,8 +205,8 @@ public class MatchQualityTests
             candidate,
             MatchQualityService.BuildContext([Rated(Favorite(1))])
         );
-        // 70% categorical weight * 1/sqrt(2) + 30% identical numeric/range data.
-        Assert.Equal(79, result.Percentage);
+        // A matching genre supplies 35%; mechanics still use cosine, numeric/range data 30%.
+        Assert.Equal(90, result.Percentage);
         Assert.InRange(result.Percentage!.Value, 0, 100);
     }
 
@@ -219,5 +225,173 @@ public class MatchQualityTests
             MatchQualityService.Calculate(close, context).Percentage
                 > MatchQualityService.Calculate(far, context).Percentage
         );
+    }
+
+    [Fact]
+    public void FantasyAndEconomicCanBothBePerfectMatchesDespiteDifferentPlayStyles()
+    {
+        var fantasy = Favorite(1, "Fantasy", "Deck Building");
+        fantasy.ComplexityWeight = 4;
+        fantasy.MinPlayTime = 120;
+        fantasy.MaxPlayTime = 180;
+        fantasy.MinPlayers = 1;
+        fantasy.MaxPlayers = 3;
+        var economic = Favorite(2, "Economic", "Auction");
+        economic.ComplexityWeight = 2;
+        economic.MinPlayTime = 30;
+        economic.MaxPlayTime = 60;
+        economic.MinPlayers = 4;
+        economic.MaxPlayers = 6;
+        var context = MatchQualityService.BuildContext([Rated(fantasy), Rated(economic)]);
+        fantasy.BggId = 101;
+        economic.BggId = 102;
+        var fantasyMatch = MatchQualityService.Calculate(GameMapping.ToDto(fantasy), context);
+        var economicMatch = MatchQualityService.Calculate(GameMapping.ToDto(economic), context);
+        Assert.Equal(100, fantasyMatch.Percentage);
+        Assert.Equal(100, economicMatch.Percentage);
+        Assert.Equal("Fantasy", fantasyMatch.MatchedGenre);
+        Assert.Equal("Economic", economicMatch.MatchedGenre);
+        Assert.Equal(1, fantasyMatch.ComparedFavorites);
+        Assert.Equal(1, economicMatch.ComparedFavorites);
+    }
+
+    [Fact]
+    public void ManySuperlikedGamesInAnotherGenreNeitherDiluteNorCertifyFantasy()
+    {
+        var fantasy = Rated(Favorite(1));
+        var others = Enumerable
+            .Range(2, 30)
+            .Select(id =>
+            {
+                var g = Favorite(id, "Economic", "Dice Rolling");
+                g.ComplexityWeight = 1;
+                g.MinPlayTime = 10;
+                g.MaxPlayTime = 20;
+                g.MinPlayers = 6;
+                g.MaxPlayers = 8;
+                return Rated(g, SwipeAction.SuperLike);
+            });
+        var before = MatchQualityService.Calculate(
+            Candidate(),
+            MatchQualityService.BuildContext([fantasy])
+        );
+        var after = MatchQualityService.Calculate(
+            Candidate(),
+            MatchQualityService.BuildContext(others.Prepend(fantasy))
+        );
+        Assert.Equal(before, after);
+        Assert.Equal(100, after.Percentage);
+        Assert.True(after.IsProvisional);
+        Assert.Equal(1, after.AvailableFavorites);
+        Assert.Equal(1, after.ComparedFavorites);
+    }
+
+    [Fact]
+    public void MultiGenreGameUsesBestApplicableProfileRatherThanAnAverage()
+    {
+        var economic = Favorite(2, "Economic", "Dice Rolling");
+        economic.ComplexityWeight = 1;
+        var context = MatchQualityService.BuildContext([Rated(Favorite(1)), Rated(economic)]);
+        var candidate = Candidate();
+        candidate.Categories = ["Economic", "Fantasy"];
+        var result = MatchQualityService.Calculate(candidate, context);
+        Assert.Equal(100, result.Percentage);
+        Assert.Equal("Fantasy", result.MatchedGenre);
+        candidate.Categories.Reverse();
+        Assert.Equal(result, MatchQualityService.Calculate(candidate, context));
+    }
+
+    [Fact]
+    public void MatchingGenreDoesNotHidePoorMechanicsComplexityOrDuration()
+    {
+        var candidate = Candidate();
+        candidate.Mechanics = ["Dice Rolling"];
+        candidate.Complexity = 5;
+        candidate.MinPlayTime = 450;
+        candidate.MaxPlayTime = 510;
+        candidate.MinPlayers = 6;
+        candidate.MaxPlayers = 8;
+        var result = MatchQualityService.Calculate(
+            candidate,
+            MatchQualityService.BuildContext([Rated(Favorite(1))])
+        );
+        Assert.Equal("Fantasy", result.MatchedGenre);
+        Assert.InRange(result.Percentage!.Value, 35, 60);
+        Assert.Equal(100, result.FeatureCoveragePercentage);
+    }
+
+    [Fact]
+    public void UnfamiliarGenreKeepsItsThirtyFivePercentWeightAndAllowsOtherMatches()
+    {
+        var candidate = Candidate();
+        candidate.Categories = ["Economic"];
+        var result = MatchQualityService.Calculate(
+            candidate,
+            MatchQualityService.BuildContext([Rated(Favorite(1))])
+        );
+        Assert.Equal(65, result.Percentage);
+        Assert.Null(result.MatchedGenre);
+        Assert.Equal(1, result.ComparedFavorites);
+    }
+
+    [Fact]
+    public void MissingGenreMetadataStillUsesKnownFeaturesWithoutInventingAProfile()
+    {
+        var favorite = Favorite(1);
+        favorite.Categories = [];
+        var result = MatchQualityService.Calculate(
+            Candidate(),
+            MatchQualityService.BuildContext([Rated(favorite)])
+        );
+        Assert.Equal(100, result.Percentage);
+        Assert.Null(result.MatchedGenre);
+        Assert.Equal(65, result.FeatureCoveragePercentage);
+        Assert.True(result.IsProvisional);
+    }
+
+    [Fact]
+    public void GenreProfilesIgnoreCaseDuplicateTagsAndAdditionalGenresOnFavorites()
+    {
+        var favorite = Favorite(1);
+        favorite.Categories = [" Fantasy ", "FANTASY", "Economic"];
+        var candidate = Candidate();
+        candidate.Categories = ["fantasy", "Fantasy", "Economic"];
+        var result = MatchQualityService.Calculate(
+            candidate,
+            MatchQualityService.BuildContext([Rated(favorite), Rated(favorite)])
+        );
+        Assert.Equal(100, result.Percentage);
+        Assert.Equal(1, result.ComparedFavorites);
+        Assert.Equal(1, result.AvailableFavorites);
+    }
+
+    [Fact]
+    public void OwnLikeCannotCreateAGenreProfileWhenOnlyUnrelatedFavoritesRemain()
+    {
+        var candidate = Candidate(1);
+        var context = MatchQualityService.BuildContext([
+            Rated(Favorite(1)),
+            Rated(Favorite(2, "Economic")),
+        ]);
+        var result = MatchQualityService.Calculate(candidate, context);
+        Assert.Null(result.MatchedGenre);
+        Assert.Equal(65, result.Percentage);
+        Assert.Equal(1, result.AvailableFavorites);
+    }
+
+    [Fact]
+    public void ConfidenceRequiresFiveReferencesInTheMatchingGenre()
+    {
+        var context = MatchQualityService.BuildContext(
+            Enumerable
+                .Range(1, 5)
+                .Select(id => Rated(Favorite(id)))
+                .Append(Rated(Favorite(6, "Economic", "Dice Rolling")))
+        );
+        var result = MatchQualityService.Calculate(Candidate(), context);
+        Assert.Equal(100, result.Percentage);
+        Assert.Equal(5, result.ComparedFavorites);
+        Assert.Equal(5, result.AvailableFavorites);
+        Assert.False(result.IsProvisional);
     }
 }

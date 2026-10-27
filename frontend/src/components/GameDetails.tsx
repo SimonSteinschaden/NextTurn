@@ -80,6 +80,12 @@ export default function GameDetails({
         </p>
         <h1 id="detail-name">{details.name}</h1>
         <MatchQualityBadge quality={details.matchQuality} />
+        {details.matchQuality?.matchedGenre && (
+          <p className="muted">
+            Passendes Genreprofil:{" "}
+            <strong>{details.matchQuality.matchedGenre}</strong>
+          </p>
+        )}
         <div className="detail-facts">
           <span>BGG #{details.bggRank ?? "–"}</span>
           <span>★ {details.averageRating?.toFixed(2) ?? "–"}</span>

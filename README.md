@@ -155,18 +155,24 @@ Konfiguration unter Recommendations: TopRankCutoff=500, TopRankProbability=0.8, 
 
 Die Karten zeigen einen auf 0–100 normierten Ähnlichkeitsindex zu den aktuellen Favoriten. Es ist keine kalibrierte Wahrscheinlichkeit für einen zukünftigen Like. BGG-Rang, Community-Bewertung und die zufällige Auswahlchance erhöhen diesen Wert nicht.
 
-Für jedes andere aktuelle Lieblingsspiel werden verglichen:
+Für jede BGG-Kategorie wird aus den aktuellen Likes/SuperLikes ein unabhängiges Genreprofil gebildet. Ein Spiel kann zu mehreren Profilen gehören. Ein Fantasy-Vorschlag wird mit den Fantasy-Favoriten verglichen; Wirtschafts-Favoriten senken diesen Wert nicht. Passt ein Vorschlag zu mehreren Genreprofilen, zählt der höchste Profilwert. Die Evidenz- und Abdeckungsangaben gehören zu genau diesem gewählten Profil.
+
+Innerhalb eines Profils gelten weiterhin diese Gewichte:
 
 | Merkmal        | Festgelegtes Gewicht | Ähnlichkeitsmaß                                                                  |
 | -------------- | -------------------: | -------------------------------------------------------------------------------- |
-| Kategorien     |                 35 % | Cosinusähnlichkeit der eindeutigen Kategorienmengen                              |
+| Genreprofil    |                 35 % | Volle Übereinstimmung bei einem passenden Genreprofil                          |
 | Mechaniken     |                 35 % | Cosinusähnlichkeit der eindeutigen Mechanikenmengen                              |
 | Komplexität    |                 15 % | 1 minus absoluter Weight-Abstand geteilt durch 4 (Skala 1–5)                     |
 | Spieldauer     |                 10 % | Verhältnis der kleineren zur größeren mittleren Dauer                            |
 | Spielerbereich |                  5 % | Überschneidung der unterstützten Spieleranzahlen geteilt durch deren Vereinigung |
 
-Je Vergleich werden ausschließlich gemeinsam bekannte Merkmale gewertet und deren Gewichte neu normiert. Die paarweisen Ähnlichkeiten werden gemittelt: Likes zählen einfach, SuperLikes dreifach. Kategorien/Mechaniken sind eindeutige Mengen; ein Spiel wird nur einmal gezählt. Dislikes, Skips und ersetzte Bewertungen sind keine positiven Referenzen. Ein Favorit wird beim eigenen Matchwert aus der Referenzmenge entfernt.
+Innerhalb des jeweiligen Genreprofils werden die paarweisen Merkmalsähnlichkeiten gemittelt: Likes zählen einfach, SuperLikes dreifach. Unterschiedliche Genreprofile werden nicht miteinander gemittelt oder auf gemeinsame 100 % verteilt. So können Fantasy und Wirtschaft unabhängig beide 100 % erreichen, wenn die übrigen Merkmale in ihrem jeweiligen Profil übereinstimmen.
 
-Ein Vergleich braucht mindestens 30 % der möglichen Merkmalsgewichte. Fehlen geeignete Referenzen, bleibt der Prozentwert null und die Oberfläche zeigt Match offen. Ein Wert ist als vorläufig markiert, wenn weniger als fünf andere Favoriten verglichen wurden, die mittlere Merkmalsabdeckung unter 70 % liegt oder Favoriten mangels Daten nicht vergleichbar waren. Das sind transparente Mindestregeln für die Anzeige, keine statistischen Konfidenzgrenzen. Die Prozentwerte werden ohne Nachkommastellen gezeigt.
+Je Vergleich werden ausschließlich gemeinsam bekannte Merkmale gewertet und deren Gewichte neu normiert. Kategorien/Mechaniken sind eindeutige Mengen; ein Spiel wird pro Genreprofil nur einmal gezählt. Dislikes, Skips und ersetzte Bewertungen sind keine positiven Referenzen. Ein Favorit wird vor Bildung der Vergleichsgruppen aus seiner eigenen Referenzmenge entfernt. Mehrfachkategorien und deren Reihenfolge ändern den Wert nicht.
 
-Die Matchqualität wird pro Anfrage frisch berechnet und in Empfehlungen, Suche, Favoriten und Details gleich ausgegeben. Empfehlungen verwenden die bereits für das Profil geladenen Interaktionen; es gibt keine zusätzliche BGG-Abfrage oder Datenbankabfrage je Karte. API-Feld: matchQuality mit percentage, comparedFavorites, availableFavorites, featureCoveragePercentage und isProvisional.
+Gibt es noch kein passendes Genreprofil oder fehlt die Genreangabe, bleiben Vergleiche der übrigen bekannten Merkmale mit den aktuellen Favoriten möglich. Eine bekannte, aber noch nicht gelikte Kategorie erhält dabei keinen Genrebonus; bei fehlender Kategorie wird das Gewicht ausgelassen. Es wird kein Genreprofil erfunden.
+
+Ein Vergleich braucht mindestens 30 % der möglichen Merkmalsgewichte. Fehlen geeignete Referenzen, bleibt der Prozentwert null und die Oberfläche zeigt Match offen. Ein Wert ist als vorläufig markiert, wenn weniger als fünf andere Favoriten des gewählten Profils verglichen wurden, die mittlere Merkmalsabdeckung unter 70 % liegt oder Favoriten mangels Daten nicht vergleichbar waren. Das sind transparente Mindestregeln für die Anzeige, keine statistischen Konfidenzgrenzen. Die Prozentwerte werden ohne Nachkommastellen gezeigt.
+
+Die Matchqualität wird pro Anfrage frisch berechnet und in Empfehlungen, Suche, Favoriten und Details gleich ausgegeben. Empfehlungen verwenden die bereits für das Profil geladenen Interaktionen; es gibt keine zusätzliche BGG-Abfrage oder Datenbankabfrage je Karte. API-Feld: matchQuality mit percentage, comparedFavorites, availableFavorites, featureCoveragePercentage, isProvisional und matchedGenre. matchedGenre benennt das gewählte Profil bzw. bleibt bei der Vergleichsvariante ohne passendes Genre null. In den Spieldetails ist das passende Genreprofil sichtbar, die Kurzinfo am Matchwert erklärt die Bezugsspiele.

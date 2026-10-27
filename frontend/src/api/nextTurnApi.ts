@@ -8,6 +8,7 @@ export type GameMatchQuality = {
   availableFavorites: number;
   featureCoveragePercentage: number;
   isProvisional: boolean;
+  matchedGenre?: string | null;
 };
 export type BoardGame = {
   id: number;

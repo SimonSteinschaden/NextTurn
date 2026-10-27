@@ -6,5 +6,6 @@ public sealed record GameMatchQuality(
     int ComparedFavorites,
     int AvailableFavorites,
     double FeatureCoveragePercentage,
-    bool IsProvisional
+    bool IsProvisional,
+    string? MatchedGenre = null
 );

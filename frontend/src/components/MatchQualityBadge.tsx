@@ -11,9 +11,14 @@ export default function MatchQualityBadge({
   const known = percentage != null;
   const provisional = known && quality?.isProvisional;
   const explanation = known
-    ? "Merkmalsähnlichkeit zu " +
+    ? (quality?.matchedGenre
+        ? "Passung zum Genreprofil „" + quality.matchedGenre + "“ aus "
+        : "Merkmalsähnlichkeit zu ") +
       (quality?.comparedFavorites ?? 0) +
       " vergleichbaren Favoriten; SuperLikes zählen stärker. " +
+      (quality?.matchedGenre
+        ? "Andere Genreprofile senken diesen Wert nicht. "
+        : "") +
       (provisional
         ? "Vorläufig wegen weniger Vergleiche oder fehlender Merkmale. "
         : "") +

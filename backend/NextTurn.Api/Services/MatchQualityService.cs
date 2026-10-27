@@ -19,6 +19,8 @@ public class MatchQualityService(IInteractionRepository interactions)
     public sealed class Context
     {
         internal List<Reference> References { get; } = [];
+        internal Dictionary<string, List<Reference>> Genres { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<int, SwipeAction> Actions { get; } = [];
         public HashSet<int> OwnedGameIds { get; } = [];
     }
@@ -56,22 +58,27 @@ public class MatchQualityService(IInteractionRepository interactions)
             if (current.Action is not (SwipeAction.Like or SwipeAction.SuperLike))
                 continue;
             var g = current.Game;
-            context.References.Add(
-                new(
-                    current.BggId,
-                    current.Action == SwipeAction.SuperLike ? 3 : 1,
-                    Snapshot(
-                        g.Categories,
-                        g.Mechanics,
-                        g.ComplexityWeight,
-                        g.MinPlayTime,
-                        g.MaxPlayTime,
-                        g.PlayingTime,
-                        g.MinPlayers,
-                        g.MaxPlayers
-                    )
+            var reference = new Reference(
+                current.BggId,
+                current.Action == SwipeAction.SuperLike ? 3 : 1,
+                Snapshot(
+                    g.Categories,
+                    g.Mechanics,
+                    g.ComplexityWeight,
+                    g.MinPlayTime,
+                    g.MaxPlayTime,
+                    g.PlayingTime,
+                    g.MinPlayers,
+                    g.MaxPlayers
                 )
             );
+            context.References.Add(reference);
+            foreach (var genre in reference.Features.Categories)
+            {
+                if (!context.Genres.TryGetValue(genre, out var members))
+                    context.Genres[genre] = members = [];
+                members.Add(reference);
+            }
         }
         return context;
     }
@@ -97,16 +104,43 @@ public class MatchQualityService(IInteractionRepository interactions)
             game.MinPlayers,
             game.MaxPlayers
         );
+        // Genres are alternative interests, not competing shares of one taste vector.
+        // Evaluate each applicable interest using only its own favorite games.
+        var profiles = new List<GameMatchQuality>();
+        foreach (var genre in candidate.Categories)
+        {
+            if (!context.Genres.TryGetValue(genre, out var members))
+                continue;
+            var references = members.Where(r => r.BggId != game.Id).ToList();
+            if (references.Count > 0)
+                profiles.Add(Compare(candidate, references, genre));
+        }
+        if (profiles.Count > 0)
+            return profiles
+                .OrderByDescending(p => p.Percentage ?? -1)
+                .ThenByDescending(p => p.FeatureCoveragePercentage)
+                .ThenByDescending(p => p.ComparedFavorites)
+                .ThenBy(p => p.MatchedGenre, StringComparer.OrdinalIgnoreCase)
+                .First();
+
+        // An unfamiliar or missing genre can still fit on mechanics and other known features.
+        // No matching genre is invented, and a game's own Like cannot supply its reference.
+        return Compare(candidate, context.References.Where(r => r.BggId != game.Id).ToList(), null);
+    }
+
+    private static GameMatchQuality Compare(
+        Features candidate,
+        IReadOnlyList<Reference> references,
+        string? genre
+    )
+    {
         var weightedSimilarity = 0d;
         var weightedCoverage = 0d;
         var totalWeight = 0d;
         var compared = 0;
         var available = 0;
-        foreach (var reference in context.References)
+        foreach (var reference in references)
         {
-            // A favorite cannot manufacture a perfect match by comparing against itself.
-            if (reference.BggId == game.Id)
-                continue;
             available++;
             var favorite = reference.Features;
             var similarity = 0d;
@@ -118,7 +152,8 @@ public class MatchQualityService(IInteractionRepository interactions)
                 similarity += Math.Clamp(value.Value, 0, 1) * importance;
                 coverage += importance;
             }
-            Add(Cosine(candidate.Categories, favorite.Categories), .35);
+            // Membership already proves this genre is liked; unrelated genres cannot dilute it.
+            Add(genre != null ? 1 : Cosine(candidate.Categories, favorite.Categories), .35);
             Add(Cosine(candidate.Mechanics, favorite.Mechanics), .35);
             Add(
                 candidate.Complexity is { } a && favorite.Complexity is { } b
@@ -153,7 +188,8 @@ public class MatchQualityService(IInteractionRepository interactions)
             compared,
             available,
             Math.Round(100 * averageCoverage, 0),
-            compared < 5 || averageCoverage + 1e-9 < .70 || compared < available
+            compared < 5 || averageCoverage + 1e-9 < .70 || compared < available,
+            genre
         );
     }
 
