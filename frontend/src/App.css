@@ -998,3 +998,57 @@ h2 {
 .app-footer {
   justify-content: flex-end;
 }
+
+.match-quality {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 1px 6px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: #e5efda;
+  color: #284d38;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.match-quality strong {
+  font-size: 18px;
+  letter-spacing: -0.4px;
+}
+.match-quality small {
+  grid-column: 1 / -1;
+  font-size: 9px;
+  font-weight: 500;
+}
+.match-quality.provisional {
+  background: #eee5f3;
+  color: #695080;
+}
+.match-quality.unknown {
+  grid-template-columns: auto;
+  background: #f0f2ea;
+  color: #6b7964;
+}
+.swipe-cover > .match-quality {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1;
+  box-shadow: 0 2px 10px #18332614;
+}
+.match-quality.compact {
+  padding: 6px 8px;
+  font-size: 10px;
+  gap: 1px 4px;
+  margin-bottom: 12px;
+}
+.match-quality.compact strong {
+  font-size: 14px;
+}
+.match-quality.compact small {
+  font-size: 8px;
+}
+.dialog-body > .match-quality {
+  margin-bottom: 18px;
+}

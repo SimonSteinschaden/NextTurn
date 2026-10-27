@@ -10,7 +10,7 @@ namespace NextTurn.Api.Controllers;
 public class GamesController(
     IGameRepository games,
     RecommendationService recommendations,
-    IInteractionRepository interactions,
+    MatchQualityService matches,
     ImportState importState
 ) : ControllerBase
 {
@@ -23,7 +23,9 @@ public class GamesController(
     {
         if (sessionId != null && !UserPreferenceService.ValidSession(sessionId))
             return BadRequest(new { message = "Ungültige Session." });
-        return Ok(await games.SearchAsync(query, sessionId, false, ct));
+        var result = await games.SearchAsync(query, sessionId, false, ct);
+        await matches.ApplyAsync(result.Items, sessionId, ct);
+        return Ok(result);
     }
 
     [HttpGet("ranked")]
@@ -52,13 +54,13 @@ public class GamesController(
         var game = await games.FindAsync(id, ct);
         if (game == null)
             return NotFound(new { message = "Spiel nicht im lokalen Katalog." });
-        var state =
-            sessionId == null
-                ? null
-                : (await interactions.CurrentAsync(sessionId, ct)).FirstOrDefault(i =>
-                    i.BggId == id
-                );
-        return Ok(GameMapping.ToDto(game, state?.Action));
+        var context = await matches.LoadAsync(sessionId, ct);
+        var dto = GameMapping.ToDto(
+            game,
+            context.Actions.TryGetValue(id, out var action) ? action : null
+        );
+        MatchQualityService.Apply([dto], context);
+        return Ok(dto);
     }
 
     [HttpGet("recommendations")]

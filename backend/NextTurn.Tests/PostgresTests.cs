@@ -352,4 +352,62 @@ public class PostgresTests(PostgresFixture fixture) : IClassFixture<PostgresFixt
         var limited = await games.CandidatesAsync("rank-pool-test", 3, [], [], false, 1, default);
         Assert.Single(limited);
     }
+
+    [Fact]
+    public async Task MatchQualityUsesPersistedCurrentFavoritesInAllGameViews()
+    {
+        await using var db = fixture.CreateDb();
+        var games = new EfGameRepository(db);
+        var interactions = new EfInteractionRepository(db);
+        await games.SeedAsync(
+            [
+                Rank(61001, 1, "Match favorite"),
+                Rank(61002, 2, "Match superlike"),
+                Rank(61003, 3, "Match target"),
+            ],
+            default
+        );
+        await games.SaveDetailsAsync(
+            [
+                Detail(61001, "Match favorite"),
+                Detail(61002, "Match superlike"),
+                Detail(61003, "Match target"),
+            ],
+            [61001, 61002, 61003],
+            null,
+            default
+        );
+        var session = "match-" + Guid.NewGuid().ToString("N");
+        await interactions.SaveAsync(session, 61001, SwipeAction.Like, default);
+        await interactions.SaveAsync(session, 61002, SwipeAction.SuperLike, default);
+        var matches = new MatchQualityService(interactions);
+        var search = await games.SearchAsync(new() { Q = "Match target" }, session, false, default);
+        await matches.ApplyAsync(search.Items, session, default);
+        var expected = Assert.Single(search.Items).MatchQuality;
+        Assert.NotNull(expected);
+        Assert.Equal(100, expected.Percentage);
+        Assert.Equal(2, expected.ComparedFavorites);
+        Assert.True(expected.IsProvisional);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>())
+            .Build();
+        var queue = await new RecommendationService(
+            games,
+            interactions,
+            config
+        ).GetRecommendationsAsync(session, 3, [], []);
+        Assert.Equal(expected, Assert.Single(queue).MatchQuality);
+        var details = GameMapping.ToDto((await games.FindAsync(61003, default))!);
+        await matches.ApplyAsync([details], session, default);
+        Assert.Equal(expected, details.MatchQuality);
+        var favorites = await games.SearchAsync(new(), session, true, default);
+        await matches.ApplyAsync(favorites.Items, session, default);
+        Assert.All(favorites.Items, g => Assert.Equal(1, g.MatchQuality!.ComparedFavorites));
+        await interactions.SaveAsync(session, 61002, SwipeAction.Dislike, default);
+        await matches.ApplyAsync([details], session, default);
+        Assert.Equal(1, details.MatchQuality!.ComparedFavorites);
+        await interactions.SaveAsync(session, 61001, SwipeAction.Skip, default);
+        await matches.ApplyAsync([details], session, default);
+        Assert.Null(details.MatchQuality!.Percentage);
+    }
 }

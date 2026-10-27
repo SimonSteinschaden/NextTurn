@@ -2,6 +2,13 @@ const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5080"
 ).replace(/\/+$/, "");
 export type SwipeAction = 0 | 1 | 2 | 3;
+export type GameMatchQuality = {
+  percentage: number | null;
+  comparedFavorites: number;
+  availableFavorites: number;
+  featureCoveragePercentage: number;
+  isProvisional: boolean;
+};
 export type BoardGame = {
   id: number;
   bggRank?: number | null;
@@ -28,6 +35,7 @@ export type BoardGame = {
   detailsAvailable: boolean;
   userAction?: SwipeAction | null;
   recommendationReason?: string | null;
+  matchQuality?: GameMatchQuality | null;
 };
 export type UserPreferenceProfile = {
   sessionId: string;

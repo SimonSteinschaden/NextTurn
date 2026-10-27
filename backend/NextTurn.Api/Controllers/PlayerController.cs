@@ -9,7 +9,8 @@ namespace NextTurn.Api.Controllers;
 public class PlayerController(
     IGameRepository games,
     StatisticsService statistics,
-    UserPreferenceService preferences
+    UserPreferenceService preferences,
+    MatchQualityService matches
 ) : ControllerBase
 {
     [HttpGet("favorites")]
@@ -21,7 +22,9 @@ public class PlayerController(
     {
         if (!UserPreferenceService.ValidSession(sessionId))
             return BadRequest(new { message = "Ungültige Session." });
-        return Ok(await games.SearchAsync(query, sessionId, true, ct));
+        var result = await games.SearchAsync(query, sessionId, true, ct);
+        await matches.ApplyAsync(result.Items, sessionId, ct);
+        return Ok(result);
     }
 
     [HttpDelete("favorites/{id:int}")]

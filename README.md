@@ -129,3 +129,23 @@ Die globale Ranking-Regel und der Entdeckungsanteil sind zwei unabhängige Entsc
 Die 80 % sind eine Wahrscheinlichkeit pro Ziehung und ein langfristiger Erwartungswert, keine starre Quote von 16 Spielen je 20er-Queue. Separate offizielle BGG-Genre-/Mechanikranglisten sind nicht gespeichert; innerhalb dieser Gruppen wird der vorhandene allgemeine BGG-Rang verwendet, ohne neue Rangdaten zu erfinden.
 
 Konfiguration unter Recommendations: TopRankCutoff=500, TopRankProbability=0.8, RankDecayExponent=0.65. ExplorationRatio=0.2 steuert unabhängig davon den Entdeckungsanteil. RecommendationScore bleibt der Profilscore; die Ranggruppenwahl und der Rangfaktor wirken zusätzlich bei der Zufallsauswahl.
+
+## Persönliche Matchqualität
+
+Die Karten zeigen einen auf 0–100 normierten Ähnlichkeitsindex zu den aktuellen Favoriten. Es ist keine kalibrierte Wahrscheinlichkeit für einen zukünftigen Like. BGG-Rang, Community-Bewertung und die zufällige Auswahlchance erhöhen diesen Wert nicht.
+
+Für jedes andere aktuelle Lieblingsspiel werden verglichen:
+
+| Merkmal        | Festgelegtes Gewicht | Ähnlichkeitsmaß                                                                  |
+| -------------- | -------------------: | -------------------------------------------------------------------------------- |
+| Kategorien     |                 35 % | Cosinusähnlichkeit der eindeutigen Kategorienmengen                              |
+| Mechaniken     |                 35 % | Cosinusähnlichkeit der eindeutigen Mechanikenmengen                              |
+| Komplexität    |                 15 % | 1 minus absoluter Weight-Abstand geteilt durch 4 (Skala 1–5)                     |
+| Spieldauer     |                 10 % | Verhältnis der kleineren zur größeren mittleren Dauer                            |
+| Spielerbereich |                  5 % | Überschneidung der unterstützten Spieleranzahlen geteilt durch deren Vereinigung |
+
+Je Vergleich werden ausschließlich gemeinsam bekannte Merkmale gewertet und deren Gewichte neu normiert. Die paarweisen Ähnlichkeiten werden gemittelt: Likes zählen einfach, SuperLikes dreifach. Kategorien/Mechaniken sind eindeutige Mengen; ein Spiel wird nur einmal gezählt. Dislikes, Skips und ersetzte Bewertungen sind keine positiven Referenzen. Ein Favorit wird beim eigenen Matchwert aus der Referenzmenge entfernt.
+
+Ein Vergleich braucht mindestens 30 % der möglichen Merkmalsgewichte. Fehlen geeignete Referenzen, bleibt der Prozentwert null und die Oberfläche zeigt Match offen. Ein Wert ist als vorläufig markiert, wenn weniger als fünf andere Favoriten verglichen wurden, die mittlere Merkmalsabdeckung unter 70 % liegt oder Favoriten mangels Daten nicht vergleichbar waren. Das sind transparente Mindestregeln für die Anzeige, keine statistischen Konfidenzgrenzen. Die Prozentwerte werden ohne Nachkommastellen gezeigt.
+
+Die Matchqualität wird pro Anfrage frisch berechnet und in Empfehlungen, Suche, Favoriten und Details gleich ausgegeben. Empfehlungen verwenden die bereits für das Profil geladenen Interaktionen; es gibt keine zusätzliche BGG-Abfrage oder Datenbankabfrage je Karte. API-Feld: matchQuality mit percentage, comparedFavorites, availableFavorites, featureCoveragePercentage und isProvisional.

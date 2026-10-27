@@ -22,6 +22,7 @@ public class BoardGameDto
     public double? BayesAverage { get; set; }
     public int? UsersRated { get; set; }
     public double? Complexity { get; set; }
+    public GameMatchQuality? MatchQuality { get; set; }
     public double RecommendationScore { get; set; }
     public string? RecommendationReason { get; set; }
     public List<string> Categories { get; set; } = [];

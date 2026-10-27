@@ -1,3 +1,4 @@
+import MatchQualityBadge from "./MatchQualityBadge";
 import type { BoardGame } from "../api/nextTurnApi";
 import { motion, useMotionValue, useTransform } from "framer-motion";
 type Direction = "left" | "right" | "up" | "down";
@@ -58,6 +59,7 @@ export default function GameCard({
         )}
         <div className="cover-shade" />
         <span className="swipe-rank">BGG #{game.bggRank ?? "–"}</span>
+        <MatchQualityBadge quality={game.matchQuality} />
         <motion.div
           style={{ opacity: likeOpacity }}
           className="swipe-stamp like-stamp"

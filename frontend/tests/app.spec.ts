@@ -187,3 +187,64 @@ test("a failed swipe keeps the game and displays a persistent error", async ({
     page.getByRole("button", { name: "Like", exact: true }),
   ).toBeEnabled();
 });
+
+test("match indicator displays the API index and its data limitations", async ({
+  page,
+}) => {
+  let quality = {
+    percentage: 78 as number | null,
+    comparedFavorites: 2,
+    availableFavorites: 2,
+    featureCoveragePercentage: 100,
+    isProvisional: true,
+  };
+  await page.route(
+    (url) => url.pathname === "/api/games/recommendations",
+    (route) =>
+      route.fulfill({
+        json: games.map((game) => ({ ...game, matchQuality: quality })),
+      }),
+  );
+  await page.goto("/");
+  await expect(
+    page.getByRole("img", {
+      name: "Matchqualität 78 Prozent, vorläufig",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".swipe-cover .match-quality")).toContainText(
+    "vorläufig",
+  );
+  quality = {
+    percentage: null,
+    comparedFavorites: 0,
+    availableFavorites: 0,
+    featureCoveragePercentage: 0,
+    isProvisional: true,
+  };
+  await page
+    .getByRole("button", { name: "Empfehlungen aktualisieren" })
+    .click();
+  await expect(
+    page.getByRole("img", { name: "Matchqualität noch offen", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".swipe-cover .match-quality")).not.toContainText(
+    "0 %",
+  );
+  quality = {
+    percentage: 92,
+    comparedFavorites: 8,
+    availableFavorites: 8,
+    featureCoveragePercentage: 100,
+    isProvisional: false,
+  };
+  await page
+    .getByRole("button", { name: "Empfehlungen aktualisieren" })
+    .click();
+  await expect(
+    page.getByRole("img", { name: "Matchqualität 92 Prozent", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".swipe-cover .match-quality")).not.toContainText(
+    "vorläufig",
+  );
+});

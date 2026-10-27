@@ -1,3 +1,4 @@
+import MatchQualityBadge from "./MatchQualityBadge";
 import { useEffect, useRef, useState } from "react";
 import { getBoardGame } from "../api/nextTurnApi";
 import type { BoardGame, SwipeAction } from "../api/nextTurnApi";
@@ -73,6 +74,7 @@ export default function GameDetails({
           {details.gameTypes.join(" · ") || "Spieltyp noch unbekannt"}
         </p>
         <h1 id="detail-name">{details.name}</h1>
+        <MatchQualityBadge quality={details.matchQuality} />
         <div className="detail-facts">
           <span>BGG #{details.bggRank ?? "–"}</span>
           <span>★ {details.averageRating?.toFixed(2) ?? "–"}</span>

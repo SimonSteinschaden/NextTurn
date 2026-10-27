@@ -1,3 +1,4 @@
+import MatchQualityBadge from "./MatchQualityBadge";
 import { useEffect, useState } from "react";
 import { getFacets, searchGames } from "../api/nextTurnApi";
 import type {
@@ -262,6 +263,7 @@ export default function CatalogView({
               </div>
               <div className="card-info">
                 <h2>{game.name}</h2>
+                <MatchQualityBadge quality={game.matchQuality} compact />
                 <p>
                   {game.yearPublished ?? "Jahr unbekannt"} · ★{" "}
                   {game.averageRating?.toFixed(1) ?? "–"}

@@ -38,6 +38,7 @@ builder.Services.AddScoped<CsvGameRepository>();
 builder.Services.AddScoped<RecommendationService>();
 builder.Services.AddScoped<UserPreferenceService>();
 builder.Services.AddScoped<StatisticsService>();
+builder.Services.AddScoped<MatchQualityService>();
 builder.Services.AddScoped<CatalogImportService>();
 builder.Services.AddHostedService<CatalogImportWorker>();
 var app = builder.Build();

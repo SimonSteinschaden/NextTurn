@@ -6,7 +6,7 @@ namespace NextTurn.Api.Services;
 
 public class RecommendationService(
     IGameRepository games,
-    UserPreferenceService preferences,
+    IInteractionRepository interactions,
     IConfiguration configuration
 )
 {
@@ -18,9 +18,10 @@ public class RecommendationService(
         CancellationToken ct = default
     )
     {
-        var profile = string.IsNullOrWhiteSpace(sessionId)
-            ? new UserPreferenceProfile()
-            : await preferences.GetProfileAsync(sessionId, ct);
+        IReadOnlyList<GameInteraction> current = string.IsNullOrWhiteSpace(sessionId)
+            ? []
+            : await interactions.CurrentAsync(sessionId, ct);
+        var profile = UserPreferenceService.BuildProfile(sessionId ?? "", current);
         var categories = profile
             .CategoryScores.Where(p => p.Value > 0)
             .OrderByDescending(p => p.Value)
@@ -68,7 +69,7 @@ public class RecommendationService(
             ct,
             cutoff
         );
-        return SelectRecommendations(
+        var result = SelectRecommendations(
             preferred,
             explore,
             profile,
@@ -81,6 +82,8 @@ public class RecommendationService(
             Math.Clamp(configuration.GetValue("Recommendations:TopRankProbability", 0.8), 0, 1),
             Math.Clamp(configuration.GetValue("Recommendations:RankDecayExponent", 0.65), 0.1, 2)
         );
+        MatchQualityService.Apply(result, MatchQualityService.BuildContext(current));
+        return result;
     }
 
     public static List<BoardGameDto> SelectRecommendations(
