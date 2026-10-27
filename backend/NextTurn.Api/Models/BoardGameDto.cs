@@ -29,6 +29,7 @@ public class BoardGameDto
     public List<string> Mechanics { get; set; } = [];
     public string[] GameTypes { get; set; } = [];
     public bool DetailsAvailable { get; set; }
+    public bool IsOwned { get; set; }
     public SwipeAction? UserAction { get; set; }
 }
 

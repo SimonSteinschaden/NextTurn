@@ -41,10 +41,14 @@ public class UserPreferenceService(IInteractionRepository interactions, IGameRep
         var profile = new UserPreferenceProfile
         {
             SessionId = sessionId,
-            TotalSwipes = current.Count(i => i.Action != SwipeAction.Skip),
-            RatedGameIds = current.Select(i => i.BggId).Distinct().ToArray(),
+            TotalSwipes = current.Count(i => i.Action.HasValue && i.Action != SwipeAction.Skip),
+            RatedGameIds = current
+                .Where(i => i.Action.HasValue)
+                .Select(i => i.BggId)
+                .Distinct()
+                .ToArray(),
         };
-        foreach (var interaction in current)
+        foreach (var interaction in current.Where(i => i.Action.HasValue))
         {
             var weight = interaction.Action switch
             {

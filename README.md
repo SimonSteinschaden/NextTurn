@@ -1,6 +1,6 @@
 # NextTurn
 
-Brettspiele entdecken, im lokalen Katalog suchen, favorisieren und den eigenen Spielgeschmack kennenlernen.
+Brettspiele entdecken, favorisieren, den eigenen Besitz verwalten und Spieleabende per Swipe planen.
 
 React / TypeScript / Vite / Tailwind / Framer Motion · ASP.NET Core 10 · EF Core / PostgreSQL 16
 
@@ -27,12 +27,12 @@ Die neuen Container nutzen das bestehende Volume weiter. Ein geändertes POSTGRE
 2. Zugangsdaten ausschließlich lokal hinterlegen:
 
 ```powershell
-dotnet user-secrets set "ConnectionStrings:NextTurn" "Host=localhost;Port=5432;Database=nextturn;Username=nextturn;Password=DEIN_LOKALES_PASSWORT" --project backend/NextTurn.Api
+dotnet user-secrets set "ConnectionStrings:NextTurn" "Host=127.0.0.1;Port=5432;Database=nextturn;Username=nextturn;Password=DEIN_LOKALES_PASSWORT" --project backend/NextTurn.Api
 dotnet user-secrets set "BggApi:BearerToken" "DEIN_BGG_TOKEN" --project backend/NextTurn.Api
 dotnet run --project backend/NextTurn.Api --launch-profile http
 ```
 
-Die .NET User Secrets werden im Development-Profil gelesen. Für andere Umgebungen stehen ConnectionStrings__NextTurn und BggApi__BearerToken als Umgebungsvariablen zur Verfügung. Innerhalb des Docker-Netzes ist der Datenbankhost nextturn_db; beim lokalen dotnet run ist es localhost. Datenbankname und Benutzer: nextturn.
+Die .NET User Secrets werden im Development-Profil gelesen. Für andere Umgebungen stehen ConnectionStrings__NextTurn und BggApi__BearerToken als Umgebungsvariablen zur Verfügung. Innerhalb des Docker-Netzes ist der Datenbankhost nextturn_db; beim lokalen dotnet run wird 127.0.0.1 verwendet, um IPv6-Verbindungsabbrüche unter Windows zu vermeiden. Datenbankname und Benutzer: nextturn.
 
 API: http://localhost:5080 · Swagger: http://localhost:5080/swagger
 
@@ -58,7 +58,7 @@ Der aktuelle Importstand ist unter /api/games/status sichtbar. Import:Enabled=fa
 
 ## Bewertungen und Empfehlungen
 
-- Like und SuperLike erscheinen in Meine Spiele.
+- Like und SuperLike erscheinen unter Sammlung → Favoriten.
 - Dislike und Skip sind keine Favoriten.
 - Jede Session besitzt genau einen aktuellen Zustand je Spiel. Identische Wiederholungen sind idempotent; Änderungen erzeugen ein neues Historienereignis und ersetzen den Lernzustand.
 - Favorit entfernen setzt den aktuellen Zustand auf Skip. Das Spiel bleibt damit aus der Entdecken-Queue ausgeschlossen.
@@ -67,6 +67,20 @@ Der aktuelle Importstand ist unter /api/games/status sichtbar. Import:Enabled=fa
 - Standardmäßig sind 80 % der Queue personalisiert und 20 % Entdeckungen. Für den Entdeckungsanteil werden möglichst unbekannte Genres/Mechaniken gewählt. Das Verhältnis ist über Recommendations:ExplorationRatio (0,1–0,5) konfigurierbar, sofern genügend unbewertete passende Spiele verfügbar sind.
 - Pro Kandidatenabfrage werden standardmäßig höchstens 300 Spiele geladen. Lernabfragen projizieren nur benötigte Merkmale statt kompletter Beschreibungen/Cover. Die Recommendation Engine verwendet Repository-Interfaces und ist unabhängig von EF Core.
 - Nach jeder bestätigten Bewertung wird die Queue neu gewichtet; überholte Antworten werden verworfen.
+
+## Besitz und Spieleabende
+
+Die Navigation enthält Sammlung und Spieleabend planen. Die Sammlung trennt Favoriten und In Besitz. Über Besitze ich / Im Besitz in Suche, Sammlung und Details wird der Besitz unabhängig von Likes gesetzt oder entfernt. Vorhandene Likes werden beim Upgrade nicht automatisch als Besitz interpretiert.
+
+Pro Session und Spiel speichert Interactions die neue Spalte IsOwned. Action ist nullable: Ein ausschließlich als Besitz markiertes Spiel hat keine Bewertung, erzeugt keinen Historieneintrag und wird dadurch weder zum Favoriten noch aus Entdecken ausgeschlossen. Likes, Entfernen aus Favoriten und Besitzänderungen erhalten jeweils den anderen Zustand. Gleichzeitige Änderungen werden mit derselben bestehenden Session-Sperre serialisiert.
+
+Ein Spieleabend hat einen Namen, ein optionales Datum und eine Personenzahl. Standardmäßig kommen Vorschläge nur aus dem aktuellen Besitz. Der Schalter Auch Spiele nicht im Besitz anzeigen ergänzt aktuelle Likes/SuperLikes zum möglichen Ausleihen. Unbesessene Spiele ohne aktuellen Like/SuperLike werden nicht aufgenommen. Es werden importierte Spiele mit bekannter, passender Spieleranzahl vorgeschlagen; ein alter globaler Dislike oder Skip verhindert die Auswahl eines eigenen Spiels für den Abend nicht.
+
+Links wischen / Heute nicht und Skip nehmen ein Spiel aus der Queue dieses Abends. Rechts wischen / Vormerken sowie Top-Wahl speichern es auf der Abend-Liste. Diese Entscheidungen werden ausschließlich in GameNightChoices gespeichert und ändern keine globalen Bewertungen, Matchreferenzen oder Spielerstatistiken. Ein neuer Abend beginnt mit eigener Auswahl. Name, Datum, Einstellungen und Abend-Liste bleiben nach Reload und Neustart erhalten; gespeicherte Abende sind auswählbar.
+
+Die Kandidatenabfrage lädt höchstens 300 Spiele, der Planer zeigt daraus bis zu 20 nach persönlicher Matchqualität und anschließend BGG-Rang. Auch Spiele, die aus den aktuellen Top 10.000 fallen, bleiben bei bestehendem Besitz/Favorit für die Planung erhalten. Die allgemeine Entdecken-Queue verwendet weiterhin ihre eigene ranggewichtete Zufallsauswahl und schließt global bewertete Spiele aus. Bereits für einen Abend entschiedene Spiele werden nur in dessen Queue ausgeschlossen.
+
+Eine bereits vorgemerkte Auswahl bleibt erhalten, wenn Besitz, Favoriten oder Personenzahl später geändert werden. Die Liste zeigt den aktuellen Besitzstatus sowie eine nicht mehr passende Personenzahl an; ein Eintrag kann jederzeit von der Abend-Liste genommen werden. Abendlisten sind seitenweise auf 24, gespeicherte Abende auf 20 Einträge begrenzt. Sessions bleiben die bestehende browsergebundene Identität.
 
 ## Statistik
 
@@ -102,6 +116,13 @@ Die Browser-Regressionstests verwenden ausdrücklich synthetische API-Fixtures. 
 - GET /api/player/favorites?sessionId=... — gefilterte/paginierte Favoriten
 - DELETE /api/player/favorites/{id}?sessionId=... — Favorit zu Skip ändern
 - GET /api/player/statistics?sessionId=... — Kennzahlen und Verteilungen
+- GET /api/player/owned?sessionId=... — gefilterte/paginierte Besitzliste mit denselben Katalogfiltern
+- PUT /api/player/owned/{id}?sessionId=... — Besitz setzen; Body: { "isOwned": true/false }
+- GET /api/game-nights?sessionId=...&page=1 — gespeicherte Abende
+- POST /api/game-nights?sessionId=... — Abend anlegen; Body: { "name": "Freitag", "date": "2026-10-30", "players": 3, "includeUnowned": false }; date darf null sein
+- GET /api/game-nights/{id}?sessionId=...&page=1 — Plan, Kandidaten, paginierte Abend-Liste und verbleibende Anzahl
+- PUT /api/game-nights/{id}?sessionId=... — Einstellungen mit demselben Body ändern
+- POST /api/game-nights/{id}/choices/{gameId}?sessionId=... — Abend-Auswahl; Body: { "action": 0/1/2/3 } (Heute nicht/Vormerken/Top-Wahl/Skip)
 
 Die alte /api/bgg/{id}-Route bleibt als explizite BGG-Abfrage erhalten. Suche, Details, Favoriten und Empfehlungen benötigen sie nicht.
 

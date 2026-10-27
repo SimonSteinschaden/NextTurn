@@ -1052,3 +1052,208 @@ h2 {
 .dialog-body > .match-quality {
   margin-bottom: 18px;
 }
+
+/* Collection and game-night planning */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.collection-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.collection-tabs button[aria-pressed="true"],
+.night-pool button[aria-pressed="true"],
+.owned {
+  background: #dfecd8;
+  color: #315c3d;
+  border-color: #b8cfaa;
+}
+.card-actions {
+  flex-wrap: wrap;
+}
+.night-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.night-toolbar label {
+  max-width: 420px;
+  width: 100%;
+}
+.night-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: end;
+  margin-bottom: 22px;
+}
+.night-settings label:first-child {
+  flex: 1;
+  min-width: 180px;
+}
+.night-settings label:nth-child(3) {
+  width: 95px;
+}
+.night-settings button {
+  font-size: 13px;
+  min-height: 43px;
+}
+.night-pool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0;
+}
+.night-pool button {
+  font-size: 12px;
+}
+.pool-badge {
+  font-size: 12px;
+  font-weight: 650;
+  color: #657758;
+}
+.night-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 440px) minmax(260px, 380px);
+  justify-content: center;
+  gap: 40px;
+}
+.night-source {
+  min-height: 20px;
+  color: #738266;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.night-shortlist {
+  min-width: 0;
+  background: #eef1e7;
+  padding: 22px;
+  border: 1px solid #e0e5d9;
+  border-radius: 18px;
+  align-self: start;
+}
+.shortlist-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.shortlist-heading h2 {
+  margin: 0;
+}
+.shortlist-card {
+  border-top: 1px solid #d9e0d0;
+  padding: 16px 0 10px;
+}
+.shortlist-open {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  text-align: left;
+  background: none;
+  margin-bottom: 10px;
+}
+.shortlist-open img {
+  width: 58px;
+  height: 64px;
+  object-fit: contain;
+  background: white;
+  border-radius: 8px;
+}
+.shortlist-open span {
+  min-width: 0;
+}
+.shortlist-open strong {
+  display: block;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.shortlist-open small {
+  display: block;
+  font-size: 11px;
+  color: #7c8a72;
+  margin-top: 6px;
+}
+.shortlist-card .match-quality {
+  margin: 0 10px 6px 0;
+}
+.night-view .swipe-stamp {
+  font-size: 26px;
+}
+@media (min-width: 761px) and (max-width: 1050px) {
+  .app-header {
+    height: auto;
+    min-height: 100px;
+    flex-wrap: wrap;
+    padding-top: 20px;
+    padding-bottom: 16px;
+    gap: 18px;
+  }
+  .main-nav {
+    margin-left: auto;
+  }
+}
+@media (max-width: 760px) {
+  .main-nav {
+    align-items: stretch;
+  }
+  .main-nav button {
+    min-width: 0;
+    width: 20%;
+    padding: 8px 3px;
+    line-height: 1.25;
+    justify-content: flex-start;
+  }
+  .night-layout {
+    grid-template-columns: minmax(0, 440px);
+    gap: 30px;
+  }
+  .night-settings {
+    gap: 12px;
+    padding: 16px;
+  }
+  .night-settings label:first-child {
+    flex-basis: 100%;
+  }
+  .night-settings label:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+  }
+  .night-settings button {
+    flex: 1 0 100%;
+  }
+  .night-view > .section-heading {
+    flex-wrap: wrap;
+  }
+  .night-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+.night-settings-panel {
+  margin-bottom: 20px;
+}
+.night-settings-panel > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #607455;
+  padding: 12px 0;
+}
+.night-settings-panel[open] > summary {
+  margin-bottom: 8px;
+}

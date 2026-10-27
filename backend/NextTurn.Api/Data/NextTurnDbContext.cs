@@ -10,6 +10,9 @@ public class NextTurnDbContext(DbContextOptions<NextTurnDbContext> options) : Db
     public DbSet<GameInteraction> Interactions => Set<GameInteraction>();
     public DbSet<InteractionEvent> InteractionEvents => Set<InteractionEvent>();
 
+    public DbSet<GameNight> GameNights => Set<GameNight>();
+    public DbSet<GameNightChoice> GameNightChoices => Set<GameNightChoice>();
+
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.HasPostgresExtension("pg_trgm");
@@ -40,6 +43,7 @@ public class NextTurnDbContext(DbContextOptions<NextTurnDbContext> options) : Db
             .HasForeignKey(i => i.SessionId)
             .OnDelete(DeleteBehavior.Restrict);
         interactions.HasIndex(i => new { i.SessionId, i.Action });
+        interactions.HasIndex(i => new { i.SessionId, i.IsOwned });
         model.Entity<InteractionEvent>().HasKey(e => e.Id);
         model.Entity<InteractionEvent>().Property(e => e.SessionId).HasMaxLength(100);
         model.Entity<InteractionEvent>().HasIndex(e => new { e.SessionId, e.CreatedAt });
@@ -55,5 +59,29 @@ public class NextTurnDbContext(DbContextOptions<NextTurnDbContext> options) : Db
             .WithMany()
             .HasForeignKey(e => e.BggId)
             .OnDelete(DeleteBehavior.Restrict);
+        model.Entity<GameNight>().HasKey(n => n.Id);
+        model.Entity<GameNight>().Property(n => n.SessionId).HasMaxLength(100);
+        model.Entity<GameNight>().Property(n => n.Name).HasMaxLength(120);
+        model.Entity<GameNight>().HasIndex(n => new { n.SessionId, n.CreatedAt });
+        model
+            .Entity<GameNight>()
+            .HasOne<PlayerSession>()
+            .WithMany()
+            .HasForeignKey(n => n.SessionId)
+            .OnDelete(DeleteBehavior.Restrict);
+        model.Entity<GameNightChoice>().HasKey(c => new { c.GameNightId, c.BggId });
+        model
+            .Entity<GameNightChoice>()
+            .HasOne<GameNight>()
+            .WithMany()
+            .HasForeignKey(c => c.GameNightId)
+            .OnDelete(DeleteBehavior.Cascade);
+        model
+            .Entity<GameNightChoice>()
+            .HasOne(c => c.Game)
+            .WithMany()
+            .HasForeignKey(c => c.BggId)
+            .OnDelete(DeleteBehavior.Restrict);
+        model.Entity<GameNightChoice>().HasIndex(c => new { c.GameNightId, c.Action });
     }
 }

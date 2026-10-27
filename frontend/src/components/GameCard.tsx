@@ -7,6 +7,7 @@ type Props = {
   exitDirection: Direction;
   onSwipe?: (direction: "left" | "right") => void;
   disabled?: boolean;
+  planning?: boolean;
   onDetails?: () => void;
 };
 const exits = {
@@ -20,6 +21,7 @@ export default function GameCard({
   exitDirection,
   onSwipe,
   disabled = false,
+  planning = false,
   onDetails,
 }: Props) {
   const x = useMotionValue(0);
@@ -64,13 +66,13 @@ export default function GameCard({
           style={{ opacity: likeOpacity }}
           className="swipe-stamp like-stamp"
         >
-          LIKE
+          {planning ? "VORMERKEN" : "LIKE"}
         </motion.div>
         <motion.div
           style={{ opacity: nopeOpacity }}
           className="swipe-stamp nope-stamp"
         >
-          NOPE
+          {planning ? "HEUTE NICHT" : "NOPE"}
         </motion.div>
       </div>
       <div className="swipe-game-info">

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import type { GameNight, GameNightSettings } from "../src/api/nextTurnApi";
 const games = [1, 2, 3].map((id) => ({
   id,
   name: "Fixture Game " + id,
@@ -19,13 +20,85 @@ const games = [1, 2, 3].map((id) => ({
 }));
 test.beforeEach(async ({ page }) => {
   const ratings = new Map<number, number>();
+  const owned = new Set<number>();
+  const nights = new Map<
+    string,
+    { plan: GameNight; choices: Map<number, number> }
+  >();
+  function enrich(game: (typeof games)[number]) {
+    return {
+      ...game,
+      isOwned: owned.has(game.id),
+      userAction: ratings.get(game.id),
+    };
+  }
+  function board(id: string) {
+    const night = nights.get(id)!;
+    const candidates = games
+      .filter(
+        (g) =>
+          !night.choices.has(g.id) &&
+          g.minPlayers <= night.plan.players &&
+          g.maxPlayers >= night.plan.players &&
+          (owned.has(g.id) ||
+            (night.plan.includeUnowned &&
+              [1, 2].includes(ratings.get(g.id) ?? -1))),
+      )
+      .map(enrich);
+    const selections = games
+      .filter((g) => [1, 2].includes(night.choices.get(g.id) ?? -1))
+      .map((g) => ({ game: enrich(g), action: night.choices.get(g.id) }));
+    return {
+      plan: night.plan,
+      candidates,
+      selections: {
+        items: selections,
+        total: selections.length,
+        page: 1,
+        pageSize: 24,
+      },
+      remainingCount: candidates.length,
+    };
+  }
   await page.route(
     (url) => url.pathname.startsWith("/api/"),
     async (route) => {
       const url = new URL(route.request().url());
       const path = url.pathname;
       let data: unknown;
-      if (path === "/api/health") data = { status: "Test API" };
+      if (path === "/api/game-nights") {
+        if (route.request().method() === "POST") {
+          const settings = route.request().postDataJSON() as GameNightSettings;
+          const id =
+            "00000000-0000-0000-0000-" +
+            String(nights.size + 1).padStart(12, "0");
+          const plan = { ...settings, id };
+          nights.set(id, { plan, choices: new Map() });
+          data = plan;
+        } else {
+          const items = [...nights.values()].map((n) => n.plan);
+          data = { items, total: items.length, page: 1, pageSize: 20 };
+        }
+      } else if (path.startsWith("/api/game-nights/")) {
+        const parts = path.split("/");
+        const id = parts[3];
+        if (parts[4] === "choices")
+          nights
+            .get(id)!
+            .choices.set(
+              Number(parts[5]),
+              route.request().postDataJSON().action,
+            );
+        else if (route.request().method() === "PUT")
+          nights.get(id)!.plan = { ...route.request().postDataJSON(), id };
+        data = board(id);
+      } else if (path.startsWith("/api/player/owned/")) {
+        const id = Number(path.split("/").at(-1));
+        if (route.request().postDataJSON().isOwned) owned.add(id);
+        else owned.delete(id);
+        await route.fulfill({ status: 204 });
+        return;
+      } else if (path === "/api/health") data = { status: "Test API" };
       else if (path === "/api/games/status")
         data = {
           catalog: {
@@ -80,22 +153,29 @@ test.beforeEach(async ({ page }) => {
           percentageDenominator:
             "Alle aktuellen Favoriten, jedes Spiel einmal.",
         };
-      } else if (path === "/api/games" || path === "/api/player/favorites") {
+      } else if (
+        path === "/api/games" ||
+        path === "/api/player/favorites" ||
+        path === "/api/player/owned"
+      ) {
         const q = (url.searchParams.get("q") ?? "").toLowerCase();
         const items = games
           .filter(
             (g) =>
               g.name.toLowerCase().includes(q) &&
               (path === "/api/games" ||
-                [1, 2].includes(ratings.get(g.id) ?? -1)),
+                (path === "/api/player/owned"
+                  ? owned.has(g.id)
+                  : [1, 2].includes(ratings.get(g.id) ?? -1))),
           )
-          .map((g) => ({ ...g, userAction: ratings.get(g.id) }));
+          .map(enrich);
         data = { items, total: items.length, page: 1, pageSize: 24 };
       } else {
         const game = games.find((g) => g.id === Number(path.split("/").at(-1)));
         data = {
           ...game,
           userAction: ratings.get(game?.id ?? 0),
+          isOwned: owned.has(game?.id ?? 0),
           description: "A local test game.",
         };
       }
@@ -126,10 +206,10 @@ test("rated game disappears and catalog likes populate favorites and dashboard",
     .locator(".catalog-card")
     .getByRole("button", { name: "Like", exact: true })
     .click();
-  await page.getByRole("button", { name: "Meine Spiele", exact: true }).click();
+  await page.getByRole("button", { name: "Sammlung", exact: true }).click();
   await expect(page.locator(".catalog-card")).toHaveCount(2);
   await page.reload();
-  await page.getByRole("button", { name: "Meine Spiele", exact: true }).click();
+  await page.getByRole("button", { name: "Sammlung", exact: true }).click();
   await expect(page.locator(".catalog-card")).toHaveCount(2);
   await page.getByRole("button", { name: "Profil", exact: true }).click();
   await expect(
@@ -247,4 +327,129 @@ test("match indicator displays the API index and its data limitations", async ({
   await expect(page.locator(".swipe-cover .match-quality")).not.toContainText(
     "vorläufig",
   );
+});
+
+test("ownership and favorites stay independent and saved nights default to owned games", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Suche", exact: true }).click();
+  const first = page
+    .locator(".catalog-card")
+    .filter({ hasText: "Fixture Game 1" });
+  const second = page
+    .locator(".catalog-card")
+    .filter({ hasText: "Fixture Game 2" });
+  await first.getByRole("button", { name: "Besitze ich", exact: true }).click();
+  await expect(
+    first.getByRole("button", { name: "✓ Im Besitz", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await second.getByRole("button", { name: "Like", exact: true }).click();
+  await page.getByRole("button", { name: "Sammlung", exact: true }).click();
+  await expect(page.locator(".catalog-card")).toHaveCount(1);
+  await expect(page.locator(".catalog-card")).toContainText("Fixture Game 2");
+  await page.getByRole("button", { name: "In Besitz", exact: true }).click();
+  await expect(page.locator(".catalog-card")).toHaveCount(1);
+  await expect(page.locator(".catalog-card")).toContainText("Fixture Game 1");
+  await page
+    .getByRole("button", { name: "Spieleabend planen", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Name", exact: true })
+    .fill("Freitag");
+  await page
+    .getByRole("button", { name: "Spieleabend anlegen", exact: true })
+    .click();
+  const borrowedToggle = page.getByRole("button", {
+    name: "Auch Spiele nicht im Besitz anzeigen",
+    exact: true,
+  });
+  await expect(borrowedToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".night-view .swipe-game-card")).toContainText(
+    "Fixture Game 1",
+  );
+  await page.getByRole("button", { name: "Heute nicht", exact: true }).click();
+  await expect(page.locator(".night-view .swipe-game-card")).toHaveCount(0);
+  await borrowedToggle.click();
+  await expect(borrowedToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".night-view .swipe-game-card")).toContainText(
+    "Fixture Game 2",
+  );
+  await expect(page.locator(".night-source")).toContainText("Zum Ausleihen");
+  await page.getByRole("button", { name: "Top-Wahl", exact: true }).click();
+  await expect(page.locator(".shortlist-card")).toHaveCount(1);
+  await expect(page.locator(".shortlist-card")).toContainText("Top-Wahl");
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Spieleabend planen", exact: true })
+    .click();
+  await expect(page.locator(".shortlist-card")).toContainText("Fixture Game 2");
+  await expect(page.locator(".night-view .swipe-game-card")).toHaveCount(0);
+  await expect(borrowedToggle).toHaveAttribute("aria-pressed", "true");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await page
+    .getByRole("button", {
+      name: "Fixture Game 2 vom Spieleabend entfernen",
+      exact: true,
+    })
+    .click();
+  await expect(page.locator(".shortlist-card")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Neuer Spieleabend", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Spieleabend anlegen", exact: true })
+    .click();
+  await expect(borrowedToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".night-view .swipe-game-card")).toContainText(
+    "Fixture Game 1",
+  );
+  await page.getByRole("button", { name: "Sammlung", exact: true }).click();
+  await page.getByRole("button", { name: "Favoriten", exact: true }).click();
+  await expect(page.locator(".catalog-card")).toHaveCount(1);
+  await expect(page.locator(".catalog-card")).toContainText("Fixture Game 2");
+});
+
+test("failed night choice preserves its card and shortlist", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Suche", exact: true }).click();
+  await page
+    .locator(".catalog-card")
+    .first()
+    .getByRole("button", { name: "Besitze ich", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Spieleabend planen", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Spieleabend anlegen", exact: true })
+    .click();
+  await expect(page.locator(".night-view .swipe-game-card")).toContainText(
+    "Fixture Game 1",
+  );
+  await page.route(
+    (url) => url.pathname.includes("/choices/"),
+    (route) =>
+      route.fulfill({
+        status: 503,
+        json: { message: "Auswahl derzeit nicht möglich." },
+      }),
+  );
+  await page.getByRole("button", { name: "Vormerken", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Auswahl derzeit nicht möglich.",
+  );
+  await expect(page.locator(".night-view .swipe-game-card")).toContainText(
+    "Fixture Game 1",
+  );
+  await expect(page.locator(".shortlist-card")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Vormerken", exact: true }),
+  ).toBeEnabled();
 });

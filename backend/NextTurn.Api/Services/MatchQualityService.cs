@@ -20,6 +20,7 @@ public class MatchQualityService(IInteractionRepository interactions)
     {
         internal List<Reference> References { get; } = [];
         public Dictionary<int, SwipeAction> Actions { get; } = [];
+        public HashSet<int> OwnedGameIds { get; } = [];
     }
 
     public async Task<Context> LoadAsync(string? sessionId, CancellationToken ct) =>
@@ -48,7 +49,10 @@ public class MatchQualityService(IInteractionRepository interactions)
                 .Select(group => group.MaxBy(i => i.UpdatedAt)!)
         )
         {
-            context.Actions[current.BggId] = current.Action;
+            if (current.Action.HasValue)
+                context.Actions[current.BggId] = current.Action.Value;
+            if (current.IsOwned)
+                context.OwnedGameIds.Add(current.BggId);
             if (current.Action is not (SwipeAction.Like or SwipeAction.SuperLike))
                 continue;
             var g = current.Game;
@@ -75,7 +79,10 @@ public class MatchQualityService(IInteractionRepository interactions)
     public static void Apply(IReadOnlyList<BoardGameDto> games, Context context)
     {
         foreach (var game in games)
+        {
             game.MatchQuality = Calculate(game, context);
+            game.IsOwned = context.OwnedGameIds.Contains(game.Id);
+        }
     }
 
     public static GameMatchQuality Calculate(BoardGameDto game, Context context)

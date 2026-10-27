@@ -2,21 +2,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import GameCard from "./components/GameCard";
 import CatalogView from "./components/CatalogView";
+import NightPlanner from "./components/NightPlanner";
 import Dashboard from "./components/Dashboard";
 import GameDetails from "./components/GameDetails";
 import {
   getRecommendations,
   removeFavorite,
   submitSwipe,
+  setOwnership,
 } from "./api/nextTurnApi";
 import type { BoardGame, SwipeAction } from "./api/nextTurnApi";
 import "./App.css";
 
-type Tab = "discover" | "search" | "favorites" | "profile";
+type Tab = "discover" | "search" | "collection" | "night" | "profile";
 const tabs: { id: Tab; label: string; icon: string }[] = [
   { id: "discover", label: "Entdecken", icon: "✦" },
   { id: "search", label: "Suche", icon: "⌕" },
-  { id: "favorites", label: "Meine Spiele", icon: "♡" },
+  { id: "collection", label: "Sammlung", icon: "♡" },
+  { id: "night", label: "Spieleabend planen", icon: "▦" },
   { id: "profile", label: "Profil", icon: "◉" },
 ];
 function App() {
@@ -27,6 +30,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [discoveryRevision, setDiscoveryRevision] = useState(0);
+  const [collectionMode, setCollectionMode] = useState<"favorites" | "owned">(
+    "favorites",
+  );
   const [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<BoardGame | null>(null);
   const [exitDirection, setExitDirection] = useState<
@@ -68,7 +75,7 @@ function App() {
     };
     void load();
     return () => controller.abort();
-  }, [players, sessionId, revision, reload]);
+  }, [players, sessionId, discoveryRevision, reload]);
   const rate = useCallback(
     async (game: BoardGame, action: SwipeAction) => {
       if (savingRef.current)
@@ -82,6 +89,7 @@ function App() {
         await submitSwipe(sessionId, game.id, action);
         setGames((old) => old.filter((g) => g.id !== game.id));
         setRevision((v) => v + 1);
+        setDiscoveryRevision((v) => v + 1);
       } catch (e) {
         rated.current.delete(game.id);
         setReload((v) => v + 1);
@@ -110,11 +118,19 @@ function App() {
     await removeFavorite(game.id, sessionId);
     rated.current.add(game.id);
     setRevision((v) => v + 1);
+    setDiscoveryRevision((v) => v + 1);
+  }
+  async function own(game: BoardGame, isOwned: boolean) {
+    await setOwnership(game.id, sessionId, isOwned);
+    setGames((old) =>
+      old.map((g) => (g.id === game.id ? { ...g, isOwned } : g)),
+    );
+    setRevision((v) => v + 1);
   }
   function newSession() {
     if (
       window.confirm(
-        "Eine neue Session startet ein neues Profil. Deine bisherigen Favoriten bleiben unter der alten Session-ID gespeichert, sind hier danach aber nicht mehr sichtbar. Fortfahren?",
+        "Eine neue Session startet ein neues Profil. Deine bisherigen Favoriten, Besitzlisten und Spieleabende bleiben unter der alten Session-ID gespeichert, sind hier danach aber nicht mehr sichtbar. Fortfahren?",
       )
     ) {
       localStorage.setItem("nextturn-session-id", crypto.randomUUID());
@@ -267,17 +283,31 @@ function App() {
             onOpen={setSelected}
             onRate={rate}
             onRemove={remove}
+            onOwnership={own}
           />
         )}
-        {tab === "favorites" && (
+        {tab === "collection" && (
           <CatalogView
-            key="favorites"
+            key={collectionMode}
             sessionId={sessionId}
-            favorites
+            collectionMode={collectionMode}
+            onCollectionModeChange={setCollectionMode}
             revision={revision}
             onOpen={setSelected}
             onRate={rate}
             onRemove={remove}
+            onOwnership={own}
+          />
+        )}
+        {tab === "night" && (
+          <NightPlanner
+            sessionId={sessionId}
+            revision={revision}
+            onOwnership={own}
+            onOpenCollection={() => {
+              setCollectionMode("owned");
+              setTab("collection");
+            }}
           />
         )}
         {tab === "profile" && (
@@ -312,6 +342,7 @@ function App() {
           sessionId={sessionId}
           onClose={() => setSelected(null)}
           onRate={rate}
+          onOwnership={own}
         />
       )}
     </div>

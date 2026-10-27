@@ -142,8 +142,11 @@ namespace NextTurn.Api.Data.Migrations
                     b.Property<int>("BggId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("Action")
+                    b.Property<int?>("Action")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("IsOwned")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -154,7 +157,67 @@ namespace NextTurn.Api.Data.Migrations
 
                     b.HasIndex("SessionId", "Action");
 
+                    b.HasIndex("SessionId", "IsOwned");
+
                     b.ToTable("Interactions");
+                });
+
+            modelBuilder.Entity("NextTurn.Api.Entities.GameNight", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IncludeUnowned")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("Players")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SessionId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId", "CreatedAt");
+
+                    b.ToTable("GameNights");
+                });
+
+            modelBuilder.Entity("NextTurn.Api.Entities.GameNightChoice", b =>
+                {
+                    b.Property<Guid>("GameNightId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BggId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("GameNightId", "BggId");
+
+                    b.HasIndex("BggId");
+
+                    b.HasIndex("GameNightId", "Action");
+
+                    b.ToTable("GameNightChoices");
                 });
 
             modelBuilder.Entity("NextTurn.Api.Entities.InteractionEvent", b =>
@@ -217,6 +280,32 @@ namespace NextTurn.Api.Data.Migrations
                         .WithMany()
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("NextTurn.Api.Entities.GameNight", b =>
+                {
+                    b.HasOne("NextTurn.Api.Entities.PlayerSession", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("NextTurn.Api.Entities.GameNightChoice", b =>
+                {
+                    b.HasOne("NextTurn.Api.Entities.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("BggId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NextTurn.Api.Entities.GameNight", null)
+                        .WithMany()
+                        .HasForeignKey("GameNightId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Game");

@@ -38,4 +38,5 @@ public interface IInteractionRepository
 {
     Task<List<GameInteraction>> CurrentAsync(string sessionId, CancellationToken ct);
     Task SaveAsync(string sessionId, int gameId, SwipeAction action, CancellationToken ct);
+    Task SetOwnershipAsync(string sessionId, int gameId, bool owned, CancellationToken ct);
 }

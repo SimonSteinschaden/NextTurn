@@ -33,6 +33,7 @@ public class CatalogQuery
 
     [StringLength(150)]
     public string? Mechanic { get; set; }
+    public bool OwnedOnly { get; set; }
     public bool SuperOnly { get; set; }
 }
 

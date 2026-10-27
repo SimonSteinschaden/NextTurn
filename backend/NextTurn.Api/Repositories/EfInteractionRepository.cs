@@ -16,6 +16,7 @@ public class EfInteractionRepository(NextTurnDbContext db) : IInteractionReposit
                 SessionId = i.SessionId,
                 BggId = i.BggId,
                 Action = i.Action,
+                IsOwned = i.IsOwned,
                 UpdatedAt = i.UpdatedAt,
                 Game = new Game
                 {
@@ -80,6 +81,39 @@ public class EfInteractionRepository(NextTurnDbContext db) : IInteractionReposit
                 CreatedAt = current.UpdatedAt,
             }
         );
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        db.ChangeTracker.Clear();
+    }
+
+    public async Task SetOwnershipAsync(
+        string sessionId,
+        int gameId,
+        bool owned,
+        CancellationToken ct
+    )
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted,
+            ct
+        );
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({sessionId}, 0))",
+            ct
+        );
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO "Sessions" ("Id", "CreatedAt") VALUES ({sessionId}, {DateTimeOffset.UtcNow}) ON CONFLICT ("Id") DO NOTHING
+            """,
+            ct
+        );
+        var current = await db.Interactions.FindAsync([sessionId, gameId], ct);
+        if (current == null)
+        {
+            current = new() { SessionId = sessionId, BggId = gameId };
+            db.Interactions.Add(current);
+        }
+        current.IsOwned = owned;
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         db.ChangeTracker.Clear();

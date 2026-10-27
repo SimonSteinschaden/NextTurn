@@ -10,7 +10,8 @@ public class PlayerController(
     IGameRepository games,
     StatisticsService statistics,
     UserPreferenceService preferences,
-    MatchQualityService matches
+    MatchQualityService matches,
+    OwnershipService ownership
 ) : ControllerBase
 {
     [HttpGet("favorites")]
@@ -25,6 +26,46 @@ public class PlayerController(
         var result = await games.SearchAsync(query, sessionId, true, ct);
         await matches.ApplyAsync(result.Items, sessionId, ct);
         return Ok(result);
+    }
+
+    [HttpGet("owned")]
+    public async Task<IActionResult> Owned(
+        string sessionId,
+        [FromQuery] CatalogQuery query,
+        CancellationToken ct
+    )
+    {
+        if (!UserPreferenceService.ValidSession(sessionId))
+            return BadRequest(new { message = "Ungültige Session." });
+        query.OwnedOnly = true;
+        var result = await games.SearchAsync(query, sessionId, false, ct);
+        await matches.ApplyAsync(result.Items, sessionId, ct);
+        return Ok(result);
+    }
+
+    [HttpPut("owned/{id:int}")]
+    public async Task<IActionResult> SetOwned(
+        int id,
+        string sessionId,
+        [FromBody] OwnershipRequest request,
+        CancellationToken ct
+    )
+    {
+        if (!request.IsOwned.HasValue)
+            return BadRequest(new { message = "Besitzstatus fehlt." });
+        try
+        {
+            await ownership.SetAsync(sessionId, id, request.IsOwned.Value, ct);
+            return NoContent();
+        }
+        catch (ArgumentException)
+        {
+            return BadRequest(new { message = "Ungültige Session." });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Spiel nicht im Katalog." });
+        }
     }
 
     [HttpDelete("favorites/{id:int}")]

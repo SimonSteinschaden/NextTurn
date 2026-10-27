@@ -11,7 +11,8 @@ public class GameInteraction
 {
     public string SessionId { get; set; } = "";
     public int BggId { get; set; }
-    public SwipeAction Action { get; set; }
+    public SwipeAction? Action { get; set; }
+    public bool IsOwned { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public Game Game { get; set; } = null!;
 }

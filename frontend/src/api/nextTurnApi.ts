@@ -34,6 +34,7 @@ export type BoardGame = {
   recommendedPlayerCounts: number[];
   detailsAvailable: boolean;
   userAction?: SwipeAction | null;
+  isOwned?: boolean;
   recommendationReason?: string | null;
   matchQuality?: GameMatchQuality | null;
 };
@@ -57,6 +58,7 @@ export type CatalogQuery = {
   category?: string;
   mechanic?: string;
   superOnly?: boolean;
+  ownedOnly?: boolean;
 };
 export type PagedResult = {
   items: BoardGame[];
@@ -140,8 +142,11 @@ export const searchGames = (
   signal?: AbortSignal,
 ) =>
   request<PagedResult>(
-    (favorites ? "/api/player/favorites" : "/api/games") +
-      params({ ...query, sessionId }),
+    (query.ownedOnly
+      ? "/api/player/owned"
+      : favorites
+        ? "/api/player/favorites"
+        : "/api/games") + params({ ...query, sessionId }),
     { signal },
   );
 export const getFacets = (signal?: AbortSignal) =>
@@ -168,3 +173,75 @@ export const submitSwipe = (
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ sessionId, gameId, action }),
   });
+
+export const setOwnership = (id: number, sessionId: string, isOwned: boolean) =>
+  request<void>("/api/player/owned/" + id + params({ sessionId }), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ isOwned }),
+  });
+export type GameNightSettings = {
+  name: string;
+  date: string | null;
+  players: number;
+  includeUnowned: boolean;
+};
+export type GameNight = GameNightSettings & { id: string };
+export type NightSelection = { game: BoardGame; action: SwipeAction };
+export type NightBoard = {
+  plan: GameNight;
+  candidates: BoardGame[];
+  selections: {
+    items: NightSelection[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
+  remainingCount: number;
+};
+export const listNights = (sessionId: string, page = 1, signal?: AbortSignal) =>
+  request<{
+    items: GameNight[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }>("/api/game-nights" + params({ sessionId, page }), { signal });
+export const createNight = (sessionId: string, settings: GameNightSettings) =>
+  request<GameNight>("/api/game-nights" + params({ sessionId }), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+export const getNight = (
+  id: string,
+  sessionId: string,
+  page = 1,
+  signal?: AbortSignal,
+) =>
+  request<NightBoard>("/api/game-nights/" + id + params({ sessionId, page }), {
+    signal,
+  });
+export const updateNight = (
+  id: string,
+  sessionId: string,
+  settings: GameNightSettings,
+) =>
+  request<NightBoard>("/api/game-nights/" + id + params({ sessionId }), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+export const chooseNightGame = (
+  id: string,
+  sessionId: string,
+  gameId: number,
+  action: SwipeAction,
+) =>
+  request<NightBoard>(
+    "/api/game-nights/" + id + "/choices/" + gameId + params({ sessionId }),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    },
+  );

@@ -7,10 +7,14 @@ export default function GameDetails({
   sessionId,
   onClose,
   onRate,
+  onOwnership,
+  planning = false,
 }: {
   game: BoardGame;
   sessionId: string;
   onClose: () => void;
+  planning?: boolean;
+  onOwnership: (g: BoardGame, owned: boolean) => Promise<void>;
   onRate: (g: BoardGame, a: SwipeAction) => Promise<void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -34,7 +38,8 @@ export default function GameDetails({
     setError("");
     try {
       await onRate(details, action);
-      setDetails((g) => ({ ...g, userAction: action }));
+      if (planning) onClose();
+      else setDetails((g) => ({ ...g, userAction: action }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Speichern fehlgeschlagen.");
     } finally {
@@ -128,20 +133,57 @@ export default function GameDetails({
         <div className="detail-actions">
           <button
             disabled={busy}
-            className={details.userAction === 1 ? "primary liked" : "primary"}
+            aria-pressed={!!details.isOwned}
+            className={details.isOwned ? "owned" : ""}
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                await onOwnership(details, !details.isOwned);
+                setDetails((g) => ({ ...g, isOwned: !g.isOwned }));
+              } catch (e) {
+                setError(
+                  e instanceof Error
+                    ? e.message
+                    : "Besitzstatus konnte nicht gespeichert werden.",
+                );
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {details.isOwned ? "✓ Im Besitz" : "Besitze ich"}
+          </button>
+          <button
+            disabled={busy}
+            className={
+              !planning && details.userAction === 1
+                ? "primary liked"
+                : "primary"
+            }
             onClick={() => rate(1)}
           >
-            ♥ {details.userAction === 1 ? "Gelikt" : "Like"}
+            ♥{" "}
+            {planning
+              ? "Vormerken"
+              : details.userAction === 1
+                ? "Gelikt"
+                : "Like"}
           </button>
           <button
             disabled={busy}
             className="superliked"
             onClick={() => rate(2)}
           >
-            ★ {details.userAction === 2 ? "SuperLike gespeichert" : "SuperLike"}
+            ★{" "}
+            {planning
+              ? "Top-Wahl"
+              : details.userAction === 2
+                ? "SuperLike gespeichert"
+                : "SuperLike"}
           </button>
           <button disabled={busy} onClick={() => rate(0)}>
-            Dislike
+            {planning ? "Heute nicht" : "Dislike"}
           </button>
           <button disabled={busy} onClick={() => rate(3)}>
             Skip

@@ -8,7 +8,7 @@ namespace NextTurn.Api.Repositories;
 
 public class EfGameRepository(NextTurnDbContext db) : IGameRepository
 {
-    private static readonly System.Linq.Expressions.Expression<Func<Game, Game>> Summary =
+    internal static readonly System.Linq.Expressions.Expression<Func<Game, Game>> Summary =
         g => new Game
         {
             BggId = g.BggId,
@@ -59,6 +59,12 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
                         && (!q.SuperOnly || i.Action == SwipeAction.SuperLike)
                     )
                 );
+        if (q.OwnedOnly)
+            query = (favorites ? query : db.Games.AsNoTracking()).Where(g =>
+                db.Interactions.Any(i =>
+                    i.SessionId == sessionId && i.BggId == g.BggId && i.IsOwned
+                )
+            );
         if (!string.IsNullOrWhiteSpace(q.Q))
         {
             var escaped = q.Q.Trim().Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
@@ -103,7 +109,7 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
             .ToListAsync(ct);
         var ids = games.Select(g => g.BggId).ToArray();
         var states = string.IsNullOrEmpty(sessionId)
-            ? new Dictionary<int, SwipeAction>()
+            ? new Dictionary<int, SwipeAction?>()
             : await db
                 .Interactions.Where(i => i.SessionId == sessionId && ids.Contains(i.BggId))
                 .ToDictionaryAsync(i => i.BggId, i => i.Action, ct);
@@ -141,7 +147,9 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
     {
         var query = Catalog.Where(g =>
             g.DetailsUpdatedAt != null
-            && !db.Interactions.Any(i => i.SessionId == sessionId && i.BggId == g.BggId)
+            && !db.Interactions.Any(i =>
+                i.SessionId == sessionId && i.BggId == g.BggId && i.Action != null
+            )
         );
         if (players.HasValue)
             query = query.Where(g =>

@@ -10,7 +10,9 @@ import type {
 
 type Props = {
   sessionId: string;
-  favorites?: boolean;
+  collectionMode?: "favorites" | "owned";
+  onCollectionModeChange?: (mode: "favorites" | "owned") => void;
+  onOwnership: (game: BoardGame, owned: boolean) => Promise<void>;
   revision: number;
   onOpen: (game: BoardGame) => void;
   onRate: (game: BoardGame, action: SwipeAction) => Promise<void>;
@@ -18,12 +20,16 @@ type Props = {
 };
 export default function CatalogView({
   sessionId,
-  favorites = false,
+  collectionMode,
+  onCollectionModeChange,
+  onOwnership,
   revision,
   onOpen,
   onRate,
   onRemove,
 }: Props) {
+  const favorites = collectionMode === "favorites";
+  const owned = collectionMode === "owned";
   const [query, setQuery] = useState<CatalogQuery>({
     page: 1,
     pageSize: 24,
@@ -49,7 +55,12 @@ export default function CatalogView({
     const timer = setTimeout(() => {
       setLoading(true);
       setError("");
-      searchGames(query, sessionId, favorites, controller.signal)
+      searchGames(
+        { ...query, ownedOnly: owned },
+        sessionId,
+        favorites,
+        controller.signal,
+      )
         .then((result) => {
           setResults(result);
           const last = Math.max(1, Math.ceil(result.total / result.pageSize));
@@ -67,7 +78,7 @@ export default function CatalogView({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, sessionId, favorites, revision]);
+  }, [query, sessionId, favorites, owned, revision]);
   function change(values: Partial<CatalogQuery>) {
     setQuery((q) => ({ ...q, ...values, page: 1 }));
   }
@@ -96,14 +107,34 @@ export default function CatalogView({
       <div className="section-heading">
         <div>
           <p className="eyebrow">
-            {favorites ? "Deine Sammlung" : "Der lokale Spielekatalog"}
+            {collectionMode ? "Deine Sammlung" : "Der lokale Spielekatalog"}
           </p>
           <h1 id="catalog-title">
-            {favorites ? "Meine Spiele" : "Finde dein nächstes Spiel"}
+            {collectionMode ? "Sammlung" : "Finde dein nächstes Spiel"}
           </h1>
         </div>
         <span className="count-pill">{results?.total ?? "…"} Spiele</span>
       </div>
+      {collectionMode && (
+        <div
+          className="collection-tabs"
+          role="group"
+          aria-label="Sammlung filtern"
+        >
+          <button
+            aria-pressed={favorites}
+            onClick={() => onCollectionModeChange?.("favorites")}
+          >
+            Favoriten
+          </button>
+          <button
+            aria-pressed={owned}
+            onClick={() => onCollectionModeChange?.("owned")}
+          >
+            In Besitz
+          </button>
+        </div>
+      )}
       <div className="filter-panel">
         <label className="search-label">
           <span>Spielname</span>
@@ -235,9 +266,11 @@ export default function CatalogView({
           ? "Suche läuft …"
           : results?.total
             ? results.total + " Treffer im lokalen Katalog"
-            : favorites
-              ? "Noch keine Favoriten. Like ein Spiel, um es hier zu sammeln."
-              : "Keine Spiele für diese Filter gefunden."}
+            : owned
+              ? "Noch keine Spiele im Besitz. Markiere deine Spiele in der Suche mit „Besitze ich“."
+              : favorites
+                ? "Noch keine Favoriten. Like ein Spiel, um es hier zu sammeln."
+                : "Keine Spiele für diese Filter gefunden."}
       </p>
       <div className="catalog-grid" aria-busy={loading}>
         {results?.items.map((game) => (
@@ -279,6 +312,28 @@ export default function CatalogView({
               </div>
             </button>
             <div className="card-actions">
+              <button
+                aria-pressed={!!game.isOwned}
+                className={game.isOwned ? "owned" : ""}
+                disabled={pending !== null}
+                onClick={async () => {
+                  setPending(game.id);
+                  setError("");
+                  try {
+                    await onOwnership(game, !game.isOwned);
+                  } catch (e) {
+                    setError(
+                      e instanceof Error
+                        ? e.message
+                        : "Besitzstatus konnte nicht gespeichert werden.",
+                    );
+                  } finally {
+                    setPending(null);
+                  }
+                }}
+              >
+                {game.isOwned ? "✓ Im Besitz" : "Besitze ich"}
+              </button>
               <button
                 aria-label={game.userAction === 1 ? "Gelikt" : "Like"}
                 className={game.userAction === 1 ? "liked" : ""}
