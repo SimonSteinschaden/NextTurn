@@ -84,7 +84,15 @@ Eine bereits vorgemerkte Auswahl bleibt erhalten, wenn Besitz, Favoriten oder Pe
 
 ## Statistik
 
-Das Dashboard verwendet ausschließlich aktuelle Likes und SuperLikes, jedes Spiel einmal. Der Nenner für Kategorien/Mechaniken/Verteilungen sind alle aktuellen Favoriten, daher dürfen sich Kategorienprozente auf mehr als 100 % summieren. Durchschnittswerte verwenden bekannte Werte; fehlende Angaben werden ausgewiesen. Die mittlere Spieldauer ist die Mitte zwischen MinPlayTime und MaxPlayTime, ersatzweise PlayingTime. Unterstützte Spieleranzahlen und von BGG empfohlene Spieleranzahlen werden getrennt gezeigt. Bei weniger als fünf Favoriten gibt es nur einen Hinweis auf erste Tendenzen.
+Das Dashboard verwendet ausschließlich aktuelle Likes und SuperLikes, jedes Spiel einmal. Der Nenner für Kategorien, Mechaniken und Diagramme sind alle aktuellen Favoriten; Mehrfachzuordnungen können zusammen über 100 % ergeben. Bewertung und Komplexität werden weiterhin aus bekannten Werten gemittelt. Der durchschnittliche BGG-Rang und die durchschnittliche Minutenzahl entfallen.
+
+Bevorzugte Spieleranzahl ist der häufigste Wert in den gespeicherten Community-Bestbesetzungen (BestPlayerCounts) der Favoriten. Ein Spiel zählt pro Spielerzahl einmal, auch bei doppelten Pollwerten. Gleichstände bleiben getrennte Zahlen, etwa 2 / 4; es wird kein Mittelwert 3 erzeugt. Best- und allgemeine Community-Empfehlungen werden in getrennten Diagrammen gezeigt. Ohne Bestangaben bleibt die bevorzugte Zahl offen; Hersteller-Min/Max und allgemeine Empfehlungen ersetzen diese Angaben nicht.
+
+Die Spieldauer-Tendenz beruht auf Häufigkeiten statt einem Durchschnitt: bekannte Zeitspannen vollständig bis 60 Minuten zählen als schnell, vollständig darüber als lang. Spannen mit Min ≤ 60 und Max > 60 bleiben variabel. Fehlt eine gültige Spanne, kann ein bekannter positiver PlayingTime-Wert verwendet werden. Ab 60 % der bekannten Angaben zeigt das Profil Eher schnell, Eher lang oder Variabel; andernfalls Gemischt. Fehlende Daten werden keiner Gruppe zugeordnet. Der Vergleich erfolgt vor Rundung der angezeigten Prozente.
+
+Die Prozentangaben der beiden neuen Kennzahlen beziehen sich ausdrücklich auf Favoriten mit den jeweiligen bekannten Angaben; die Diagramme verwenden weiterhin alle Favoriten als Nenner. Weniger als fünf Datenpunkte oder unter 70 % Datenabdeckung kennzeichnen die Kennzahl als vorläufig. Das sind Anzeigeregeln, keine statistischen Konfidenzintervalle. Die Profilbeschreibung verwendet dieselben Tendenzen und keine mittlere Spielzeit.
+
+Die Statistikantwort enthält preferredPlayers (counts, knownGames, matchingGames, percentage, isProvisional), playTimePreference (tendency, Datenanzahlen und Anteile) und bestPlayerCounts. Die bisherigen Felder averageRank, averagePlayTime und die rein unterstützten playerCounts entfallen.
 
 ## Tests
 

@@ -1302,3 +1302,17 @@ h2 {
   padding: 11px 12px;
   font-size: 14px;
 }
+
+.metric {
+  min-width: 0;
+}
+.metric > strong {
+  overflow-wrap: anywhere;
+}
+.metric > small {
+  display: block;
+  margin-top: 9px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: #7a8970;
+}

@@ -490,4 +490,59 @@ public class PostgresTests(PostgresFixture fixture) : IClassFixture<PostgresFixt
         Assert.Equal("Economic", economic.MatchedGenre);
         Assert.Equal(100, economic.Percentage);
     }
+
+    [Fact]
+    public async Task ProfileUsesPersistedCommunityBestAndDurationDistributionAfterChangedFavorites()
+    {
+        await using var db = fixture.CreateDb();
+        var games = new EfGameRepository(db);
+        var interactions = new EfInteractionRepository(db);
+        await games.SeedAsync(
+            [
+                Rank(63001, 1, "Profile quick"),
+                Rank(63002, 2, "Profile long"),
+                Rank(63003, 3, "Only owned"),
+            ],
+            default
+        );
+        var quick = Detail(63001, "Profile quick");
+        quick.MinPlayers = 1;
+        quick.MaxPlayers = 9;
+        quick.BestPlayerCounts = [3];
+        quick.RecommendedPlayerCounts = [2, 3, 4];
+        quick.MinPlayTime = 20;
+        quick.MaxPlayTime = 30;
+        var slow = Detail(63002, "Profile long");
+        slow.MinPlayers = 2;
+        slow.MaxPlayers = 6;
+        slow.BestPlayerCounts = [3];
+        slow.MinPlayTime = 120;
+        slow.MaxPlayTime = 180;
+        await games.SaveDetailsAsync(
+            [quick, slow, Detail(63003, "Only owned")],
+            [63001, 63002, 63003],
+            null,
+            default
+        );
+        var session = "profile-modes-" + Guid.NewGuid().ToString("N");
+        await interactions.SaveAsync(session, 63001, SwipeAction.Like, default);
+        await interactions.SaveAsync(session, 63002, SwipeAction.SuperLike, default);
+        await interactions.SetOwnershipAsync(session, 63003, true, default);
+        await using var restarted = fixture.CreateDb();
+        var service = new StatisticsService(new EfInteractionRepository(restarted));
+        var result = await service.GetAsync(session, default);
+        Assert.Equal(2, result.Favorites);
+        Assert.Equal([3], result.PreferredPlayers.Counts);
+        Assert.Equal(2, result.PreferredPlayers.KnownGames);
+        Assert.Equal(100, result.PreferredPlayers.Percentage);
+        Assert.Equal("mixed", result.PlayTimePreference.Tendency);
+        Assert.Equal(1, result.PlayTimePreference.ShortGames);
+        Assert.Equal(1, result.PlayTimePreference.LongGames);
+        Assert.Equal(0, result.PlayTimePreference.MissingGames);
+        await interactions.SaveAsync(session, 63001, SwipeAction.Skip, default);
+        result = await service.GetAsync(session, default);
+        Assert.Equal("long", result.PlayTimePreference.Tendency);
+        Assert.Equal([3], result.PreferredPlayers.Counts);
+        Assert.Equal(1, result.PreferredPlayers.KnownGames);
+    }
 }

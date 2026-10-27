@@ -152,9 +152,7 @@ test.beforeEach(async ({ page }) => {
           favorites: favorites.length,
           likes: favorites.length,
           superLikes: 0,
-          averageRank: 1,
           averageRating: 8,
-          averagePlayTime: 60,
           averageComplexity: 3,
           missingData: {},
           categories: [
@@ -162,7 +160,28 @@ test.beforeEach(async ({ page }) => {
           ],
           mechanics: [],
           complexity: [],
-          playerCounts: [],
+          bestPlayerCounts: favorites.length
+            ? [{ name: "3", count: favorites.length, percentage: 100 }]
+            : [],
+          preferredPlayers: {
+            counts: favorites.length ? [3] : [],
+            knownGames: favorites.length,
+            matchingGames: favorites.length,
+            percentage: favorites.length ? 100 : null,
+            isProvisional: true,
+          },
+          playTimePreference: {
+            tendency: favorites.length ? "short" : "unknown",
+            knownGames: favorites.length,
+            missingGames: 0,
+            shortGames: favorites.length,
+            longGames: 0,
+            variableGames: 0,
+            shortPercentage: favorites.length ? 100 : null,
+            longPercentage: favorites.length ? 0 : null,
+            variablePercentage: favorites.length ? 0 : null,
+            isProvisional: true,
+          },
           recommendedPlayerCounts: [],
           playTimes: [],
           profile: "Testprofil aus aktuellen Favoriten.",
@@ -233,7 +252,9 @@ test("rated game disappears and catalog likes populate favorites and dashboard",
     page.getByRole("heading", { name: "Dein Spielerprofil" }),
   ).toBeVisible();
   await expect(
-    page.locator(".metric").filter({ hasText: "Favoriten" }),
+    page
+      .locator(".metric")
+      .filter({ has: page.getByText("Favoriten", { exact: true }) }),
   ).toContainText("2");
 });
 test("details open and close accessibly and mobile view does not overflow", async ({
@@ -674,4 +695,136 @@ test("typing a rank never reuses a previous swipe or sends a rating", async ({
     "Fixture Game 3",
   );
   expect(votes).toHaveLength(2);
+});
+
+test("profile shows community best counts and duration tendencies instead of ranking or time averages", async ({
+  page,
+}) => {
+  let statistics = {
+    favorites: 5,
+    likes: 4,
+    superLikes: 1,
+    averageRating: 8,
+    averageComplexity: 3,
+    categories: [],
+    mechanics: [],
+    complexity: [],
+    bestPlayerCounts: [
+      { name: "2", count: 3, percentage: 60 },
+      { name: "4", count: 3, percentage: 60 },
+    ],
+    recommendedPlayerCounts: [{ name: "3", count: 5, percentage: 100 }],
+    preferredPlayers: {
+      counts: [2, 4],
+      knownGames: 5,
+      matchingGames: 3,
+      percentage: 60 as number | null,
+      isProvisional: false,
+    },
+    playTimePreference: {
+      tendency: "short",
+      knownGames: 5,
+      missingGames: 0,
+      shortGames: 4,
+      longGames: 1,
+      variableGames: 0,
+      shortPercentage: 80 as number | null,
+      longPercentage: 20 as number | null,
+      variablePercentage: 0 as number | null,
+      isProvisional: false,
+    },
+    playTimes: [
+      { name: "Schnell (bis 60 Min.)", count: 4, percentage: 80 },
+      { name: "Lang (über 60 Min.)", count: 1, percentage: 20 },
+    ],
+    missingData: {} as Record<string, number>,
+    profile: "Tendenzen aus aktuellen Favoriten.",
+    percentageDenominator:
+      "Alle aktuellen Favoriten, jedes Spiel einmal; Mehrfachzuordnung möglich.",
+  };
+  await page.route(
+    (url) => url.pathname === "/api/player/statistics",
+    (route) => route.fulfill({ json: statistics }),
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "Profil", exact: true }).click();
+  const players = page
+    .locator(".metric")
+    .filter({ hasText: "Bevorzugte Spieleranzahl" });
+  const duration = page
+    .locator(".metric")
+    .filter({ hasText: "Spieldauer-Tendenz" });
+  await expect(players.locator("strong")).toHaveText("2 / 4");
+  await expect(players).toContainText(
+    "Je 60 % von 5 Favoriten mit Best-Angaben",
+  );
+  await expect(duration.locator("strong")).toHaveText("Eher schnell");
+  await expect(duration).toContainText("80 % bis 60 Min.");
+  await expect(page.getByText("Ø BGG-Ranking", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Ø Spieldauer", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", {
+      name: "Unterstützte Spieleranzahlen",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", {
+      name: "Community: beste Spieleranzahlen",
+      exact: true,
+    }),
+  ).toBeVisible();
+  statistics = {
+    ...statistics,
+    playTimePreference: {
+      ...statistics.playTimePreference,
+      tendency: "mixed",
+      shortGames: 2,
+      longGames: 2,
+      variableGames: 1,
+      shortPercentage: 40,
+      longPercentage: 40,
+      variablePercentage: 20,
+    },
+  };
+  await page.getByRole("button", { name: "Suche", exact: true }).click();
+  await page.getByRole("button", { name: "Profil", exact: true }).click();
+  await expect(duration.locator("strong")).toHaveText("Gemischt");
+  await expect(duration).toContainText(
+    "40 % schnell · 40 % lang · 20 % variabel",
+  );
+  statistics = {
+    ...statistics,
+    bestPlayerCounts: [],
+    preferredPlayers: {
+      counts: [],
+      knownGames: 0,
+      matchingGames: 0,
+      percentage: null,
+      isProvisional: true,
+    },
+    playTimePreference: {
+      tendency: "unknown",
+      knownGames: 0,
+      missingGames: 5,
+      shortGames: 0,
+      longGames: 0,
+      variableGames: 0,
+      shortPercentage: null,
+      longPercentage: null,
+      variablePercentage: null,
+      isProvisional: true,
+    },
+    playTimes: [],
+    missingData: { "Community-Bestbesetzung": 5, Spieldauer: 5 },
+  };
+  await page.getByRole("button", { name: "Suche", exact: true }).click();
+  await page.getByRole("button", { name: "Profil", exact: true }).click();
+  await expect(players.locator("strong")).toHaveText("Noch offen");
+  await expect(duration.locator("strong")).toHaveText("Noch offen");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
 });

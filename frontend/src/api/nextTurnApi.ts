@@ -87,15 +87,32 @@ export type PlayerStatistics = {
   favorites: number;
   likes: number;
   superLikes: number;
-  averageRank?: number | null;
   averageRating?: number | null;
-  averagePlayTime?: number | null;
   averageComplexity?: number | null;
   missingData: Record<string, number>;
   categories: DistributionItem[];
   mechanics: DistributionItem[];
   complexity: DistributionItem[];
-  playerCounts: DistributionItem[];
+  bestPlayerCounts: DistributionItem[];
+  preferredPlayers: {
+    counts: number[];
+    knownGames: number;
+    matchingGames: number;
+    percentage: number | null;
+    isProvisional: boolean;
+  };
+  playTimePreference: {
+    tendency: "short" | "long" | "variable" | "mixed" | "unknown";
+    knownGames: number;
+    missingGames: number;
+    shortGames: number;
+    longGames: number;
+    variableGames: number;
+    shortPercentage: number | null;
+    longPercentage: number | null;
+    variablePercentage: number | null;
+    isProvisional: boolean;
+  };
   recommendedPlayerCounts: DistributionItem[];
   playTimes: DistributionItem[];
   profile: string;

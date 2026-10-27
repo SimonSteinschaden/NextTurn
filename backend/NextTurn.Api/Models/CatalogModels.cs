@@ -53,18 +53,40 @@ public class PlayerStatistics
     public int Favorites { get; set; }
     public int Likes { get; set; }
     public int SuperLikes { get; set; }
-    public double? AverageRank { get; set; }
     public double? AverageRating { get; set; }
-    public double? AveragePlayTime { get; set; }
     public double? AverageComplexity { get; set; }
     public Dictionary<string, int> MissingData { get; set; } = new();
     public List<DistributionItem> Categories { get; set; } = [];
     public List<DistributionItem> Mechanics { get; set; } = [];
     public List<DistributionItem> Complexity { get; set; } = [];
-    public List<DistributionItem> PlayerCounts { get; set; } = [];
+    public List<DistributionItem> BestPlayerCounts { get; set; } = [];
+    public PlayerCountPreference PreferredPlayers { get; set; } = new([], 0, 0, null, true);
+    public DurationPreference PlayTimePreference { get; set; } =
+        new("unknown", 0, 0, 0, 0, 0, null, null, null, true);
     public List<DistributionItem> RecommendedPlayerCounts { get; set; } = [];
     public List<DistributionItem> PlayTimes { get; set; } = [];
     public string Profile { get; set; } = "";
     public string PercentageDenominator { get; set; } =
         "Alle aktuellen Favoriten, jedes Spiel einmal; Mehrfachzuordnung möglich.";
 }
+
+public sealed record PlayerCountPreference(
+    int[] Counts,
+    int KnownGames,
+    int MatchingGames,
+    double? Percentage,
+    bool IsProvisional
+);
+
+public sealed record DurationPreference(
+    string Tendency,
+    int KnownGames,
+    int MissingGames,
+    int ShortGames,
+    int LongGames,
+    int VariableGames,
+    double? ShortPercentage,
+    double? LongPercentage,
+    double? VariablePercentage,
+    bool IsProvisional
+);

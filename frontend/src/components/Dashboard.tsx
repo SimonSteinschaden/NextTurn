@@ -48,6 +48,7 @@ export default function Dashboard({
     const controller = new AbortController();
     getStatistics(sessionId, controller.signal)
       .then((result) => {
+        if (controller.signal.aborted) return;
         setData(result);
         setError("");
       })
@@ -67,6 +68,47 @@ export default function Dashboard({
     value == null
       ? "–"
       : value.toLocaleString("de-DE", { maximumFractionDigits: digits });
+  const players = data.preferredPlayers;
+  const duration = data.playTimePreference;
+  const counts = players?.counts ?? [];
+  const playerValue =
+    counts.length === 0
+      ? "Noch offen"
+      : counts.length <= 3
+        ? counts.join(" / ")
+        : "Mehrere";
+  const playerDetail = players?.knownGames
+    ? (counts.length > 1 ? "Je " : "") +
+      number(players.percentage) +
+      " % von " +
+      players.knownGames +
+      " Favoriten mit Best-Angaben" +
+      (players.isProvisional ? " · vorläufig" : "")
+    : "Community-Bestangaben fehlen";
+  const durationLabels = {
+    short: "Eher schnell",
+    long: "Eher lang",
+    variable: "Variabel",
+    mixed: "Gemischt",
+    unknown: "Noch offen",
+  };
+  const durationValue = durationLabels[duration?.tendency ?? "unknown"];
+  const durationDetail = !duration?.knownGames
+    ? "Zeitangaben fehlen"
+    : (duration.tendency === "short"
+        ? number(duration.shortPercentage) + " % bis 60 Min."
+        : duration.tendency === "long"
+          ? number(duration.longPercentage) + " % über 60 Min."
+          : duration.tendency === "variable"
+            ? number(duration.variablePercentage) +
+              " % mit variabler Zeitspanne"
+            : number(duration.shortPercentage) +
+              " % schnell · " +
+              number(duration.longPercentage) +
+              " % lang" +
+              (duration.variableGames
+                ? " · " + number(duration.variablePercentage) + " % variabel"
+                : "")) + (duration.isProvisional ? " · vorläufig" : "");
   return (
     <section aria-labelledby="profile-title">
       <div className="section-heading">
@@ -84,33 +126,46 @@ export default function Dashboard({
       </div>
       <div className="metric-grid">
         {[
-          ["Favoriten", data.favorites],
-          ["Likes", data.likes],
-          ["SuperLikes", data.superLikes],
-          [
-            "Ø BGG-Ranking",
-            data.averageRank == null ? "–" : "#" + number(data.averageRank, 0),
-          ],
-          ["Ø Bewertung", number(data.averageRating)],
-          ["Ø Spieldauer", number(data.averagePlayTime, 0) + " Min."],
-          ["Ø Komplexität", number(data.averageComplexity) + "/5"],
-        ].map(([label, value]) => (
+          { label: "Favoriten", value: data.favorites },
+          { label: "Likes", value: data.likes },
+          { label: "SuperLikes", value: data.superLikes },
+          {
+            label: "Bevorzugte Spieleranzahl",
+            value: playerValue,
+            detail: playerDetail,
+          },
+          { label: "Ø Bewertung", value: number(data.averageRating) },
+          {
+            label: "Spieldauer-Tendenz",
+            value: durationValue,
+            detail: durationDetail,
+          },
+          {
+            label: "Ø Komplexität",
+            value: number(data.averageComplexity) + "/5",
+          },
+        ].map(({ label, value, detail }) => (
           <div className="metric" key={label}>
             <span>{label}</span>
             <strong>{value}</strong>
+            {detail && <small>{detail}</small>}
           </div>
         ))}
       </div>
       <p className="chart-note">
-        {data.percentageDenominator} Durchschnitte nutzen nur bekannte Werte.
-        Spielerzahlen zeigen unterstützte Bereiche bis 100 Personen.
+        {data.percentageDenominator} Beste Besetzungen stammen aus
+        Community-Abstimmungen. Dauertendenzen berücksichtigen bekannte
+        Zeitspannen.
       </p>
       <div className="chart-grid">
         <Bars title="Deine Genres & Themen" items={data.categories} />
         <Bars title="Beliebte Mechaniken" items={data.mechanics} />
         <Bars title="Komplexitätsprofil" items={data.complexity} />
-        <Bars title="Typische Spieldauer" items={data.playTimes} />
-        <Bars title="Unterstützte Spieleranzahlen" items={data.playerCounts} />
+        <Bars title="Spieldauer deiner Favoriten" items={data.playTimes} />
+        <Bars
+          title="Community: beste Spieleranzahlen"
+          items={data.bestPlayerCounts ?? []}
+        />
         <Bars
           title="Von BGG empfohlene Spieleranzahlen"
           items={data.recommendedPlayerCounts}

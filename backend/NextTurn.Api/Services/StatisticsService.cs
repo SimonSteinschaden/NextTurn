@@ -14,6 +14,51 @@ public class StatisticsService(IInteractionRepository interactions)
         : g.PlayingTime > 0 ? g.PlayingTime
         : null;
 
+    private static IEnumerable<int> BestCounts(Game g) =>
+        g.BestPlayerCounts.Where(n => n is >= 1 and <= 100).Distinct();
+
+    private static string? DurationClass(Game g)
+    {
+        if (g.MinPlayTime > 0 && g.MaxPlayTime >= g.MinPlayTime)
+            return g.MaxPlayTime <= 60 ? "short"
+                : g.MinPlayTime > 60 ? "long"
+                : "variable";
+        return g.PlayingTime > 0
+            ? g.PlayingTime <= 60
+                ? "short"
+                : "long"
+            : null;
+    }
+
+    private static DurationPreference DescribeDuration(IReadOnlyList<Game> games)
+    {
+        var classes = games.Select(DurationClass).Where(c => c != null).ToList();
+        var known = classes.Count;
+        var quick = classes.Count(c => c == "short");
+        var slow = classes.Count(c => c == "long");
+        var variable = classes.Count(c => c == "variable");
+        // Test raw counts, not rounded display percentages, at the 60% threshold.
+        var tendency =
+            known == 0 ? "unknown"
+            : quick * 100L >= known * 60L ? "short"
+            : slow * 100L >= known * 60L ? "long"
+            : variable * 100L >= known * 60L ? "variable"
+            : "mixed";
+        double? Share(int count) => known == 0 ? null : Math.Round(100d * count / known, 1);
+        return new(
+            tendency,
+            known,
+            games.Count - known,
+            quick,
+            slow,
+            variable,
+            Share(quick),
+            Share(slow),
+            Share(variable),
+            known < 5 || known < games.Count * .7
+        );
+    }
+
     public static PlayerStatistics Calculate(IReadOnlyList<GameInteraction> interactions)
     {
         var favorites = interactions
@@ -39,34 +84,44 @@ public class StatisticsService(IInteractionRepository interactions)
                 .OrderByDescending(g => g.Count)
                 .ThenBy(g => g.Name)
                 .ToList();
+        List<DistributionItem> PlayerDistribution(Func<Game, IEnumerable<int>> selector) =>
+            Distribution(g =>
+                    selector(g)
+                        .Select(n => n.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                )
+                .OrderByDescending(d => d.Count)
+                .ThenBy(d => int.Parse(d.Name, System.Globalization.CultureInfo.InvariantCulture))
+                .ToList();
+
+        var bestCounts = PlayerDistribution(BestCounts);
+        var knownBest = games.Count(g => BestCounts(g).Any());
+        var mostCommon = bestCounts.FirstOrDefault()?.Count ?? 0;
+        var preferred = new PlayerCountPreference(
+            bestCounts
+                .Where(d => d.Count == mostCommon)
+                .Select(d => int.Parse(d.Name, System.Globalization.CultureInfo.InvariantCulture))
+                .Order()
+                .ToArray(),
+            knownBest,
+            mostCommon,
+            knownBest == 0 ? null : Math.Round(100d * mostCommon / knownBest, 1),
+            knownBest < 5 || knownBest < count * .7
+        );
+        var duration = DescribeDuration(games);
         var result = new PlayerStatistics
         {
             Favorites = count,
             Likes = favorites.Count(i => i.Action == SwipeAction.Like),
             SuperLikes = favorites.Count(i => i.Action == SwipeAction.SuperLike),
-            AverageRank = Average(g => g.BggRank),
             AverageRating = Average(g => g.AverageRating),
-            AveragePlayTime = Average(Duration),
             AverageComplexity = Average(g => g.ComplexityWeight > 0 ? g.ComplexityWeight : null),
+            PreferredPlayers = preferred,
+            PlayTimePreference = duration,
             Categories = Distribution(g => g.Categories),
             Mechanics = Distribution(g => g.Mechanics),
-            PlayerCounts = Distribution(g =>
-                g.MinPlayers > 0 && g.MaxPlayers > 0
-                    ? Enumerable
-                        .Range(
-                            Math.Max(1, g.MinPlayers.Value),
-                            Math.Max(
-                                0,
-                                Math.Min(100, g.MaxPlayers.Value)
-                                    - Math.Max(1, g.MinPlayers.Value)
-                                    + 1
-                            )
-                        )
-                        .Select(n => n.ToString())
-                    : []
-            ),
-            RecommendedPlayerCounts = Distribution(g =>
-                g.RecommendedPlayerCounts.Select(n => n.ToString())
+            BestPlayerCounts = bestCounts,
+            RecommendedPlayerCounts = PlayerDistribution(g =>
+                g.RecommendedPlayerCounts.Where(n => n is >= 1 and <= 100)
             ),
             Complexity = Distribution(g =>
                 g.ComplexityWeight is > 0 and var w
@@ -80,26 +135,25 @@ public class StatisticsService(IInteractionRepository interactions)
                     : []
             ),
             PlayTimes = Distribution(g =>
-                Duration(g) is { } t
-                    ?
-                    [
-                        t <= 30 ? "Bis 30 Min."
-                        : t <= 60 ? "31–60 Min."
-                        : t <= 120 ? "61–120 Min."
-                        : "Über 120 Min.",
-                    ]
-                    : []
+                DurationClass(g) switch
+                {
+                    "short" => ["Schnell (bis 60 Min.)"],
+                    "long" => ["Lang (über 60 Min.)"],
+                    "variable" => ["Variabel (überlappt 60 Min.)"],
+                    _ => [],
+                }
             ),
             MissingData = new()
             {
-                ["Ranking"] = games.Count(g => !g.BggRank.HasValue),
                 ["Bewertung"] = games.Count(g => !g.AverageRating.HasValue),
-                ["Spieldauer"] = games.Count(g => !Duration(g).HasValue),
+                ["Spieldauer"] = duration.MissingGames,
                 ["Komplexität"] = games.Count(g => !(g.ComplexityWeight > 0)),
                 ["Kategorien"] = games.Count(g => g.Categories.Length == 0),
                 ["Mechaniken"] = games.Count(g => g.Mechanics.Length == 0),
-                ["Spieleranzahl"] = games.Count(g => !(g.MinPlayers > 0) || !(g.MaxPlayers > 0)),
-                ["BGG-Spielerempfehlung"] = games.Count(g => g.RecommendedPlayerCounts.Length == 0),
+                ["Community-Bestbesetzung"] = count - knownBest,
+                ["BGG-Spielerempfehlung"] = games.Count(g =>
+                    !g.RecommendedPlayerCounts.Any(n => n is >= 1 and <= 100)
+                ),
             },
         };
         result.Profile = count switch
@@ -127,15 +181,32 @@ public class StatisticsService(IInteractionRepository interactions)
                                 "0.0",
                                 System.Globalization.CultureInfo.GetCultureInfo("de-DE")
                             )
-                            + "/5"
-                        : ""
-                )
-                + (
-                    result.AveragePlayTime is { } time
-                        ? ". Typische mittlere Spieldauer: " + Math.Round(time) + " Minuten."
+                            + "/5."
                         : "."
                 ),
         };
+        if (count > 0)
+        {
+            result.Profile += duration.Tendency switch
+            {
+                "short" => " Bei der Spieldauer überwiegen schnelle Spiele bis 60 Minuten.",
+                "long" => " Bei der Spieldauer überwiegen lange Spiele über 60 Minuten.",
+                "variable" => " Deine Favoriten haben überwiegend variable Zeitspannen.",
+                "mixed" => " Bei der Spieldauer zeigt sich ein gemischtes Bild.",
+                _ => "",
+            };
+            if (preferred.Counts.Length is > 0 and <= 3)
+                result.Profile +=
+                    " Häufig beste Community-Besetzung: "
+                    + string.Join(" oder ", preferred.Counts)
+                    + (
+                        preferred.Counts.Length == 1 && preferred.Counts[0] == 1
+                            ? " Person."
+                            : " Personen."
+                    );
+            else if (preferred.Counts.Length > 3)
+                result.Profile += " Mehrere Community-Bestbesetzungen liegen gleichauf.";
+        }
         return result;
     }
 }
