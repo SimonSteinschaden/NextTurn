@@ -20,7 +20,8 @@ public interface IGameRepository
         string[] mechanics,
         bool exploration,
         int limit,
-        CancellationToken ct
+        CancellationToken ct,
+        int topRankCutoff = 500
     );
     Task SeedAsync(IReadOnlyList<BoardGameRankEntry> ranks, CancellationToken ct);
     Task<List<int>> ImportIdsAsync(DateTimeOffset staleBefore, CancellationToken ct);

@@ -135,7 +135,8 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
         string[] mechanics,
         bool exploration,
         int limit,
-        CancellationToken ct
+        CancellationToken ct,
+        int topRankCutoff = 500
     )
     {
         var query = Catalog.Where(g =>
@@ -149,23 +150,32 @@ public class EfGameRepository(NextTurnDbContext db) : IGameRepository
                 && g.MinPlayers <= players
                 && g.MaxPlayers >= players
             );
-        if (!exploration && (categories.Length > 0 || mechanics.Length > 0))
-            query = query.Where(g =>
-                g.Categories.Any(c => categories.Contains(c))
-                || g.Mechanics.Any(m => mechanics.Contains(m))
-            );
-        if (exploration)
-            return await query
-                .OrderBy(g => EF.Functions.Random())
-                .Take(limit)
-                .Select(Summary)
-                .ToListAsync(ct);
-        return await query
-            .OrderBy(g => g.BggRank)
-            .ThenBy(g => g.BggId)
-            .Take(limit)
+        IOrderedQueryable<Game> OrderBand(IQueryable<Game> band)
+        {
+            if (categories.Length == 0 && mechanics.Length == 0)
+                return band.OrderBy(g => EF.Functions.Random());
+            if (exploration)
+                return band.OrderBy(g =>
+                        g.Categories.Any(c => categories.Contains(c))
+                        || g.Mechanics.Any(m => mechanics.Contains(m))
+                    )
+                    .ThenBy(g => EF.Functions.Random());
+            return band.OrderByDescending(g =>
+                    g.Categories.Any(c => categories.Contains(c))
+                    || g.Mechanics.Any(m => mechanics.Contains(m))
+                )
+                .ThenBy(g => EF.Functions.Random());
+        }
+        var budget = Math.Max(1, limit);
+        var top = await OrderBand(query.Where(g => g.BggRank <= topRankCutoff))
+            .Take((budget + 1) / 2)
             .Select(Summary)
             .ToListAsync(ct);
+        var tail = await OrderBand(query.Where(g => g.BggRank > topRankCutoff))
+            .Take(budget - top.Count)
+            .Select(Summary)
+            .ToListAsync(ct);
+        return top.Concat(tail).ToList();
     }
 
     public async Task SeedAsync(IReadOnlyList<BoardGameRankEntry> ranks, CancellationToken ct)

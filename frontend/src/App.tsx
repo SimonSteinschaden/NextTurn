@@ -227,7 +227,8 @@ function App() {
                 <h2>Vertrautes trifft Neugier.</h2>
                 <p>
                   Die meisten Vorschläge orientieren sich an deinen Vorlieben.
-                  Jeder fünfte Platz öffnet die Tür zu einer neuen Richtung.
+                  Rund jeder fünfte Vorschlag öffnet die Tür zu einer neuen
+                  Richtung.
                 </p>
                 <div className="aside-note">
                   Bereits bewertete oder übersprungene Spiele kommen nicht

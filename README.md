@@ -114,3 +114,18 @@ Session-IDs bleiben in localStorage. Das ist noch kein Benutzerkonto; ein andere
 BGG-Daten und Cover gehören ihren jeweiligen Rechteinhabern. Attribution und Verlinkung erfolgen im globalen Footer. Das unveränderte Powered-by-BGG-Logo liegt unter frontend/public/powered-by-bgg.png (Bildquelle: https://dm1i7q1ruvbhg.cloudfront.net/assets/powered_by_bgg-9f2993c7fad826d5407c35b5c8117b08d2a6cdf5beb1f0c02d06a7dc7f5cdd7f.png). Lizenz/Registrierung: https://boardgamegeek.com/using_the_xml_api und https://boardgamegeek.com/xmlapi/termsofuse.
 
 Bestandsaufnahme, Risiken und tatsächliche Phasenergebnisse: docs/Entwicklungsauftrag.md.
+
+## Ranking-Gewichtung der nächsten Vorschläge
+
+Die globale Ranking-Regel und der Entdeckungsanteil sind zwei unabhängige Entscheidungen:
+
+- Pro Vorschlag wird mit 80 % Wahrscheinlichkeit die Gruppe BGG-Rang 1–500 und mit 20 % die Gruppe 501–10.000 gewählt.
+- Innerhalb der gewählten Gruppe wird ohne Wiederholung gewichtet gezogen. Bei ansonsten gleichen Merkmalen sinkt die Chance mit schlechterem Rang; Standardgewicht für den Rang: 1 / Rang^0,65.
+- Der bestehende Profilscore erhöht bzw. senkt dieses Gewicht. Bevorzugte Kategorien und Mechaniken bleiben dadurch wahrscheinlicher; innerhalb derselben Vorlieben haben besser gerankte Spiele höhere Chancen. Ranking und Profilsignal sind getrennt: Auch eine sehr starke Genrevorliebe kann die globale Top-500-Wahrscheinlichkeit nicht aushebeln.
+- Weiterhin sind standardmäßig 20 % der Queue-Plätze zum Entdecken weniger vertrauter Genres/Mechaniken reserviert. Das bedeutet weder 100 % bekannte Genres noch 100 % Top-500-Spiele.
+- Die Kandidatenabfragen berücksichtigen beide Ranggruppen und bevorzugen bekannte Merkmale für personalisierte Plätze bzw. weniger bekannte Merkmale für Entdeckungen. Sie laden weiterhin höchstens das konfigurierte Kandidatenlimit je Pool.
+- Wenn eine Ranggruppe durch Spielerzahlfilter, fehlende Details oder bereits bewertete Spiele nicht mehr verfügbar ist, wird auf die verbleibende Gruppe ausgewichen. Bereits bewertete Spiele werden dabei nie wieder aufgenommen.
+
+Die 80 % sind eine Wahrscheinlichkeit pro Ziehung und ein langfristiger Erwartungswert, keine starre Quote von 16 Spielen je 20er-Queue. Separate offizielle BGG-Genre-/Mechanikranglisten sind nicht gespeichert; innerhalb dieser Gruppen wird der vorhandene allgemeine BGG-Rang verwendet, ohne neue Rangdaten zu erfinden.
+
+Konfiguration unter Recommendations: TopRankCutoff=500, TopRankProbability=0.8, RankDecayExponent=0.65. ExplorationRatio=0.2 steuert unabhängig davon den Entdeckungsanteil. RecommendationScore bleibt der Profilscore; die Ranggruppenwahl und der Rangfaktor wirken zusätzlich bei der Zufallsauswahl.

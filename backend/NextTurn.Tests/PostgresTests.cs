@@ -301,4 +301,55 @@ public class PostgresTests(PostgresFixture fixture) : IClassFixture<PostgresFixt
         Assert.Equal(1, await verify.Interactions.CountAsync(i => i.SessionId == session));
         Assert.Equal(1, await verify.InteractionEvents.CountAsync(i => i.SessionId == session));
     }
+
+    [Fact]
+    public async Task CandidatePoolsKeepBothRankBandsAndAllowNewGenres()
+    {
+        await using var db = fixture.CreateDb();
+        var games = new EfGameRepository(db);
+        await games.SeedAsync(
+            [
+                Rank(50011, 1, "Rank head favorite"),
+                Rank(50012, 500, "Rank head discovery"),
+                Rank(50013, 501, "Rank tail favorite"),
+                Rank(50014, 9000, "Rank tail discovery"),
+            ],
+            default
+        );
+        var headOther = Detail(50012, "Rank head discovery");
+        headOther.Categories = ["Party"];
+        headOther.Mechanics = ["Dice Rolling"];
+        var tailOther = Detail(50014, "Rank tail discovery");
+        tailOther.Categories = ["Party"];
+        tailOther.Mechanics = ["Dice Rolling"];
+        await games.SaveDetailsAsync(
+            [
+                Detail(50011, "Rank head favorite"),
+                headOther,
+                Detail(50013, "Rank tail favorite"),
+                tailOther,
+            ],
+            [50011, 50012, 50013, 50014],
+            null,
+            default
+        );
+        foreach (var exploration in new[] { false, true })
+        {
+            var candidates = await games.CandidatesAsync(
+                "rank-pool-test",
+                3,
+                ["Fantasy"],
+                ["Deck Building"],
+                exploration,
+                4,
+                default
+            );
+            Assert.Equal(4, candidates.Count);
+            Assert.Equal(2, candidates.Count(g => g.BggRank <= 500));
+            Assert.Equal(2, candidates.Count(g => g.BggRank > 500));
+            Assert.Contains(candidates, g => g.Categories.Contains("Party"));
+        }
+        var limited = await games.CandidatesAsync("rank-pool-test", 3, [], [], false, 1, default);
+        Assert.Single(limited);
+    }
 }
