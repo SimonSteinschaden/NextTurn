@@ -1,110 +1,85 @@
+using NextTurn.Api.Entities;
 using NextTurn.Api.Models;
+using NextTurn.Api.Repositories;
 
-namespace NextTurn.Api.Services
+namespace NextTurn.Api.Services;
+
+public class UserPreferenceService(IInteractionRepository interactions, IGameRepository games)
 {
-    public class UserPreferenceService
+    public static bool ValidSession(string? id) =>
+        id != null
+        && id.Length is > 0 and <= 100
+        && id.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_');
+
+    public async Task<UserPreferenceProfile> GetProfileAsync(
+        string sessionId,
+        CancellationToken ct = default
+    ) => BuildProfile(sessionId, await interactions.CurrentAsync(sessionId, ct));
+
+    public async Task<UserPreferenceProfile> ApplySwipeAsync(
+        SwipeFeedbackDto feedback,
+        CancellationToken ct = default
+    )
     {
-        private readonly Dictionary<string, UserPreferenceProfile> _profiles
-            = new();
+        if (
+            !ValidSession(feedback.SessionId)
+            || !Enum.IsDefined(feedback.Action)
+            || feedback.GameId < 1
+        )
+            throw new ArgumentException("Ungültige Session oder Bewertung.");
+        if (await games.FindAsync(feedback.GameId, ct) == null)
+            throw new KeyNotFoundException("Spiel nicht im lokalen Katalog.");
+        await interactions.SaveAsync(feedback.SessionId, feedback.GameId, feedback.Action, ct);
+        return await GetProfileAsync(feedback.SessionId, ct);
+    }
 
-        private readonly BggService _bggService;
-
-        public UserPreferenceService(BggService bggService)
+    public static UserPreferenceProfile BuildProfile(
+        string sessionId,
+        IReadOnlyList<GameInteraction> current
+    )
+    {
+        var profile = new UserPreferenceProfile
         {
-            _bggService = bggService;
-        }
-
-        public UserPreferenceProfile GetOrCreateProfile(string sessionId)
+            SessionId = sessionId,
+            TotalSwipes = current.Count(i => i.Action != SwipeAction.Skip),
+            RatedGameIds = current.Select(i => i.BggId).Distinct().ToArray(),
+        };
+        foreach (var interaction in current)
         {
-            if (_profiles.TryGetValue(sessionId, out var profile))
+            var weight = interaction.Action switch
             {
-                return profile;
-            }
-
-            profile = new UserPreferenceProfile
-            {
-                SessionId = sessionId
+                SwipeAction.Like => 1d,
+                SwipeAction.SuperLike => 3d,
+                SwipeAction.Dislike => -1d,
+                _ => 0d,
             };
-
-            _profiles[sessionId] = profile;
-
-            return profile;
+            foreach (var category in interaction.Game.Categories.Distinct())
+                profile.CategoryScores[category] =
+                    profile.CategoryScores.GetValueOrDefault(category) + weight;
+            foreach (var mechanic in interaction.Game.Mechanics.Distinct())
+                profile.MechanicScores[mechanic] =
+                    profile.MechanicScores.GetValueOrDefault(mechanic) + weight;
         }
-
-        public async Task<UserPreferenceProfile> ApplySwipeAsync(
-            SwipeFeedbackDto feedback)
+        var positive = current
+            .Where(i => i.Action is SwipeAction.Like or SwipeAction.SuperLike)
+            .ToList();
+        double? Weighted(Func<Game, double?> selector)
         {
-            var profile = GetOrCreateProfile(feedback.SessionId);
-
-            var game = await _bggService.GetBoardGameAsync(feedback.GameId);
-
-            if (game == null)
-            {
-                return profile;
-            }
-
-            var weight = feedback.Action switch
-            {
-                SwipeAction.Like => 1.0,
-                SwipeAction.SuperLike => 3.0,
-                SwipeAction.Dislike => -1.0,
-                SwipeAction.Skip => 0.0,
-                _ => 0.0
-            };
-
-            foreach (var category in game.Categories)
-            {
-                AddScore(profile.CategoryScores, category, weight);
-            }
-
-            foreach (var mechanic in game.Mechanics)
-            {
-                AddScore(profile.MechanicScores, mechanic, weight);
-            }
-
-            if (feedback.Action != SwipeAction.Skip && game.Complexity.HasValue)
-            {
-                profile.PreferredComplexity =
-                    CalculateNewAverage(
-                        profile.PreferredComplexity,
-                        game.Complexity.Value,
-                        profile.TotalSwipes
-                    );
-            }
-
-            if (feedback.Action != SwipeAction.Skip)
-            {
-                profile.TotalSwipes++;
-            }
-
-            return profile;
+            var known = positive.Where(i => selector(i.Game).HasValue).ToList();
+            return known.Count == 0
+                ? null
+                : known.Sum(i =>
+                    selector(i.Game)!.Value * (i.Action == SwipeAction.SuperLike ? 3 : 1)
+                ) / known.Sum(i => i.Action == SwipeAction.SuperLike ? 3d : 1d);
         }
-
-        private void AddScore(
-            Dictionary<string, double> scores,
-            string key,
-            double value)
-        {
-            if (!scores.ContainsKey(key))
-            {
-                scores[key] = 0;
-            }
-
-            scores[key] += value;
-        }
-
-        private double CalculateNewAverage(
-            double currentAverage,
-            double newValue,
-            int currentCount)
-        {
-            if (currentCount == 0)
-            {
-                return newValue;
-            }
-
-            return ((currentAverage * currentCount) + newValue)
-                   / (currentCount + 1);
-        }
+        profile.PreferredComplexity =
+            Weighted(g => g.ComplexityWeight > 0 ? g.ComplexityWeight : null) ?? 0;
+        profile.PreferredPlayTime = Weighted(g => StatisticsService.Duration(g));
+        profile.PreferredPlayerCount = Weighted(g =>
+            g.BestPlayerCounts.Length > 0 ? g.BestPlayerCounts.Average()
+            : g.MinPlayers > 0 && g.MaxPlayers > 0 ? (g.MinPlayers.Value + g.MaxPlayers.Value) / 2d
+            : null
+        );
+        return profile;
     }
 }

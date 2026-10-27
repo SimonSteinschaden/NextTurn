@@ -1,148 +1,258 @@
-using System.Net.Http.Headers;
 using System.Globalization;
+using System.Net;
+using System.Net.Http.Headers;
 using System.Xml.Linq;
-using NextTurn.Api.Models;
 using Microsoft.Extensions.Caching.Memory;
+using NextTurn.Api.Models;
 
+namespace NextTurn.Api.Services;
 
-namespace NextTurn.Api.Services
+public class BggService(
+    IConfiguration configuration,
+    IMemoryCache cache,
+    IHttpClientFactory clients
+)
 {
-    public class BggService
+    private readonly SemaphoreSlim gate = new(1, 1);
+    private DateTimeOffset nextRequest = DateTimeOffset.MinValue;
+
+    public async Task<BoardGameDto?> GetBoardGameAsync(int id, CancellationToken ct = default)
     {
-        private readonly IMemoryCache _cache;
-        private readonly IConfiguration _configuration;
-        private readonly HttpClient _httpClient;
+        if (cache.TryGetValue("bgg-game-" + id, out BoardGameDto? cached))
+            return cached;
+        return (await GetBoardGamesAsync([id], ct)).FirstOrDefault();
+    }
 
-        public BggService(IConfiguration configuration, IMemoryCache cache)
+    public async Task<IReadOnlyList<BoardGameDto>> GetBoardGamesAsync(
+        IReadOnlyList<int> ids,
+        CancellationToken ct
+    )
+    {
+        if (ids.Count is < 1 or > 20)
+            throw new ArgumentOutOfRangeException(
+                nameof(ids),
+                "BGG supports 1–20 IDs per request."
+            );
+        var token = configuration["BggApi:BearerToken"];
+        if (string.IsNullOrWhiteSpace(token))
+            throw new InvalidOperationException(
+                "BGG-Token fehlt in der lokalen Backend-Konfiguration."
+            );
+        var baseUri = new Uri(
+            configuration["BggApi:BaseUrl"] ?? "https://boardgamegeek.com/xmlapi2"
+        );
+        if (baseUri.Scheme != "https" || baseUri.Host != "boardgamegeek.com")
+            throw new InvalidOperationException(
+                "Der BGG-Token darf nur an https://boardgamegeek.com gesendet werden."
+            );
+        await gate.WaitAsync(ct);
+        try
         {
-            _httpClient = new HttpClient();
-            _configuration = configuration;
-            _cache = cache;
-        }
-
-        public async Task<BoardGameDto?> GetBoardGameAsync(int id)
-        {
-            var cacheKey = $"bgg-game-{id}";
-
-            if (_cache.TryGetValue(cacheKey, out BoardGameDto? cachedGame))
+            var client = clients.CreateClient("bgg");
+            for (var attempt = 0; attempt < 5; attempt++)
             {
-                return cachedGame;
-            }
-
-            var baseUrl =    _configuration["BggApi:BaseUrl"] ?? "https://boardgamegeek.com/xmlapi2";
-            var userAgent =  _configuration["BggApi:UserAgent"];
-            var token =      _configuration["BggApi:BearerToken"];
-            
-            if(string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(token))
-            {
-                throw new InvalidOperationException("BGG API token or BaseUrl is missing.");
-            }
-
-            _httpClient.DefaultRequestHeaders.Clear();
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent ?? "NextTurn/1.0");
-
-            _httpClient.DefaultRequestHeaders.Accept.Clear();
-            _httpClient.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
-
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-            var url = $"{baseUrl}/thing?id={id}&stats=1";
-            var response = await _httpClient.GetAsync(url);
-
-            if(!response.IsSuccessStatusCode)
-            {
-             var errorBody = await response.Content.ReadAsStringAsync();
-             throw new Exception($"BGG API request failed with status code {response.StatusCode}. Response: {errorBody}");
-            }
-            
-            var xmlText = await response.Content.ReadAsStringAsync();
-
-            var game = ParseBoardGameXml(xmlText);
-
-            if (game != null)
-            {
-                _cache.Set(
-                    cacheKey,
-                    game,
-                    TimeSpan.FromHours(24)
+                var delay = nextRequest - DateTimeOffset.UtcNow;
+                if (delay > TimeSpan.Zero)
+                    await Task.Delay(delay, ct);
+                using var request = new HttpRequestMessage(
+                    HttpMethod.Get,
+                    baseUri.ToString().TrimEnd('/')
+                        + "/thing?id="
+                        + string.Join(",", ids)
+                        + "&stats=1"
                 );
-            }
-
-            return game;        
-        }
-
-        private BoardGameDto? ParseBoardGameXml(string xmlText){
-            var xml=XDocument.Parse(xmlText);
-            var item = xml.Descendants("item").FirstOrDefault();
-            if(item == null) return null;
-            var game = new BoardGameDto();
-            game.Id = int.Parse(item.Attribute("id")?.Value ?? "0");
-            game.Name = item.Elements("name").FirstOrDefault(n => n.Attribute("type")?.Value == "primary")?.Attribute("value")?.Value ?? "";
-            game.Thumbnail = item.Element("thumbnail")?.Value ?? "";
-            game.Image = item.Element("image")?.Value ?? "";
-            game.YearPublished = int.TryParse(item.Element("yearpublished")?.Attribute("value")?.Value, out var year) ? year : null;
-            game.MinPlayers = int.TryParse(item.Element("minplayers")?.Attribute("value")?.Value, out var minPlayers) ? minPlayers : null;
-            game.MaxPlayers = int.TryParse(item.Element("maxplayers")?.Attribute("value")?.Value, out var maxPlayers) ? maxPlayers : null;
-            game.PlayingTime = int.TryParse(item.Element("playingtime")?.Attribute("value")?.Value, out var playingTime) ? playingTime : null;
-            game.AverageRating = double.TryParse(item.Element("statistics")?.Element("ratings")?.Element("average")?.Attribute("value")?.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var avgRating) ? avgRating : null;
-            game.Complexity = double.TryParse(item.Element("statistics")?.Element("ratings")?.Element("averageweight")?.Attribute("value")?.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var complexity) ? complexity : null;
-            
-            game.Categories = item.Elements("link")
-                .Where(x => x.Attribute("type")?.Value == "boardgamecategory")
-                .Select(x => x.Attribute("value")?.Value ?? "")
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .ToList();
-
-            game.Mechanics = item.Elements("link")
-                .Where(x => x.Attribute("type")?.Value == "boardgamemechanic")
-                .Select(x => x.Attribute("value")?.Value ?? "")
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .ToList();
-
-            game.PlayerCountPoll = item.Elements("poll")
-            .Where(p => p.Attribute("name")?.Value == "suggested_numplayers")
-            .Elements("results")
-            .Select(results =>
-            {
-                var playerCount =
-                    results.Attribute("numplayers")?.Value ?? "";
-
-                var resultValues = results.Elements("result")
-                    .ToDictionary(
-                        r => r.Attribute("value")?.Value ?? "",
-                        r => int.TryParse(r.Attribute("numvotes")?.Value, out var votes)
-                            ? votes
-                            : 0
-                    );
-
-                return new PlayerCountPollDto
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                request.Headers.UserAgent.ParseAdd(
+                    configuration["BggApi:UserAgent"] ?? "NextTurn/1.0"
+                );
+                request.Headers.Accept.ParseAdd("application/xml");
+                nextRequest = DateTimeOffset.UtcNow.AddSeconds(
+                    Math.Max(5, configuration.GetValue("BggApi:RequestIntervalSeconds", 5))
+                );
+                HttpResponseMessage response;
+                try
                 {
-                    PlayerCount = playerCount,
-                    Best = resultValues.GetValueOrDefault("Best"),
-                    Recommended = resultValues.GetValueOrDefault("Recommended"),
-                    NotRecommended = resultValues.GetValueOrDefault("Not Recommended")
-                };
-            })
-            .ToList();
-            return game;
-        }
-
-        private int? ParseNullableInt(string? value)
-        {
-            if (int.TryParse(value, out var result))
-            {
-                return result;
+                    response = await client.SendAsync(request, ct);
+                }
+                catch (HttpRequestException) when (attempt < 4)
+                {
+                    nextRequest = DateTimeOffset.UtcNow.AddSeconds(5 * Math.Pow(2, attempt));
+                    continue;
+                }
+                catch (TaskCanceledException) when (!ct.IsCancellationRequested && attempt < 4)
+                {
+                    nextRequest = DateTimeOffset.UtcNow.AddSeconds(5 * Math.Pow(2, attempt));
+                    continue;
+                }
+                using (response)
+                {
+                    if (
+                        response.StatusCode
+                        is HttpStatusCode.Unauthorized
+                            or HttpStatusCode.Forbidden
+                    )
+                        throw new BggAuthorizationException(
+                            "BGG hat den Zugriff abgelehnt (HTTP "
+                                + (int)response.StatusCode
+                                + "). Token/Lizenz lokal prüfen."
+                        );
+                    var retryable =
+                        response.StatusCode
+                            is HttpStatusCode.Accepted
+                                or HttpStatusCode.TooManyRequests
+                        || (int)response.StatusCode >= 500;
+                    if (retryable && attempt < 4)
+                    {
+                        var retry =
+                            response.Headers.RetryAfter?.Delta
+                            ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow)
+                            ?? TimeSpan.FromSeconds(5 * Math.Pow(2, attempt));
+                        nextRequest = DateTimeOffset.UtcNow.Add(
+                            retry > TimeSpan.FromSeconds(5) ? retry : TimeSpan.FromSeconds(5)
+                        );
+                        continue;
+                    }
+                    if (
+                        !response.IsSuccessStatusCode
+                        || response.StatusCode == HttpStatusCode.Accepted
+                    )
+                        throw new HttpRequestException(
+                            "BGG-Abfrage fehlgeschlagen (HTTP " + (int)response.StatusCode + ").",
+                            null,
+                            response.StatusCode
+                        );
+                    var games = ParseBoardGamesXml(await response.Content.ReadAsStringAsync(ct));
+                    foreach (var game in games)
+                        cache.Set("bgg-game-" + game.Id, game, TimeSpan.FromHours(24));
+                    return games;
+                }
             }
-            return null;
+            throw new HttpRequestException("BGG hat nach mehreren Versuchen nicht geantwortet.");
         }
-
-        private double? ParseNullableDouble(string? value)
+        finally
         {
-            if (double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
-            {
-                return result;
-            }
-            return null;
+            gate.Release();
         }
     }
+
+    public static List<BoardGameDto> ParseBoardGamesXml(string text)
+    {
+        var xml = XDocument.Parse(text);
+        return xml.Descendants("item")
+            .Select(item =>
+            {
+                var ratings = item.Element("statistics")?.Element("ratings");
+                var polls = item.Elements("poll")
+                    .Where(p => (string?)p.Attribute("name") == "suggested_numplayers")
+                    .Elements("results")
+                    .Select(r => new PlayerCountPollDto
+                    {
+                        PlayerCount = (string?)r.Attribute("numplayers") ?? "",
+                        Best = Votes(r, "Best"),
+                        Recommended = Votes(r, "Recommended"),
+                        NotRecommended = Votes(r, "Not Recommended"),
+                    })
+                    .ToList();
+                return new BoardGameDto
+                {
+                    Id = Int((string?)item.Attribute("id")) ?? 0,
+                    Name =
+                        item.Elements("name")
+                            .FirstOrDefault(n => (string?)n.Attribute("type") == "primary")
+                            ?.Attribute("value")
+                            ?.Value
+                        ?? "",
+                    Description = item.Element("description")?.Value,
+                    Image = item.Element("image")?.Value ?? "",
+                    Thumbnail = item.Element("thumbnail")?.Value ?? "",
+                    YearPublished = KnownYear(item),
+                    MinPlayers = PositiveInt(item, "minplayers"),
+                    MaxPlayers = PositiveInt(item, "maxplayers"),
+                    PlayingTime = PositiveInt(item, "playingtime"),
+                    MinPlayTime = PositiveInt(item, "minplaytime"),
+                    MaxPlayTime = PositiveInt(item, "maxplaytime"),
+                    MinAge = PositiveInt(item, "minage"),
+                    AverageRating = ValueDouble(ratings, "average"),
+                    BayesAverage = ValueDouble(ratings, "bayesaverage"),
+                    UsersRated = ValueInt(ratings, "usersrated"),
+                    Complexity = ValueDouble(ratings, "averageweight"),
+                    BggRank = Int(
+                        ratings
+                            ?.Element("ranks")
+                            ?.Elements("rank")
+                            .FirstOrDefault(r => (string?)r.Attribute("name") == "boardgame")
+                            ?.Attribute("value")
+                            ?.Value
+                    ),
+                    Categories = Links(item, "boardgamecategory"),
+                    Mechanics = Links(item, "boardgamemechanic"),
+                    GameTypes = item.Attribute("type") is { } type ? [type.Value] : [],
+                    PlayerCountPoll = polls,
+                    BestPlayerCounts = polls
+                        .Where(p =>
+                            p.Best > 0 && p.Best >= p.Recommended && p.Best > p.NotRecommended
+                        )
+                        .Select(p => Int(p.PlayerCount))
+                        .OfType<int>()
+                        .Distinct()
+                        .ToArray(),
+                    RecommendedPlayerCounts = polls
+                        .Where(p => p.Best + p.Recommended > p.NotRecommended)
+                        .Select(p => Int(p.PlayerCount))
+                        .OfType<int>()
+                        .Distinct()
+                        .ToArray(),
+                    DetailsAvailable = true,
+                };
+            })
+            .Where(g => g.Id > 0 && !string.IsNullOrWhiteSpace(g.Name))
+            .ToList();
+    }
+
+    private static int? PositiveInt(XElement? element, string name)
+    {
+        var value = ValueInt(element, name);
+        return value > 0 ? value : null;
+    }
+
+    private static int? KnownYear(XElement? element)
+    {
+        var value = ValueInt(element, "yearpublished");
+        return value == 0 ? null : value;
+    }
+
+    private static int Votes(XElement r, string name) =>
+        Int(
+            r.Elements("result")
+                .FirstOrDefault(x => (string?)x.Attribute("value") == name)
+                ?.Attribute("numvotes")
+                ?.Value
+        ) ?? 0;
+
+    private static int? Int(string? s) =>
+        int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : null;
+
+    private static int? ValueInt(XElement? e, string name) =>
+        Int(e?.Element(name)?.Attribute("value")?.Value);
+
+    private static double? ValueDouble(XElement? e, string name) =>
+        double.TryParse(
+            e?.Element(name)?.Attribute("value")?.Value,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var n
+        )
+        && n > 0
+            ? n
+            : null;
+
+    private static List<string> Links(XElement e, string type) =>
+        e.Elements("link")
+            .Where(l => (string?)l.Attribute("type") == type)
+            .Select(l => (string?)l.Attribute("value"))
+            .OfType<string>()
+            .Distinct()
+            .ToList();
 }
+
+public class BggAuthorizationException(string message) : Exception(message);

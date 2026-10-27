@@ -1,35 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
 using NextTurn.Api.Services;
 
-namespace NextTurn.Api.Controllers
+namespace NextTurn.Api.Controllers;
+
+[ApiController, Route("api/bgg")]
+public class BggController(BggService bgg) : ControllerBase
 {
-    [ApiController]
-    [Route("api/bgg")]
-    public class BggController : ControllerBase
+    // Legacy explicit lookup. Local catalog/search/recommendations never call this endpoint.
+    [HttpGet("{id:int:min(1)}")]
+    public async Task<IActionResult> GetBoardGame(int id, CancellationToken ct)
     {
-        private readonly BggService _bggService;
-
-        public BggController(BggService bggService)
-        {
-            _bggService = bggService;
-        }
-
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetBoardGame(int id)
-        {            
-            try
-            {
-                var game = await _bggService.GetBoardGameAsync(id);
-                if (game == null)
-                {
-                    return NotFound(new { message = $"Board game with ID {id} not found." });
-                }
-                return Ok(game);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while fetching board game data.", details = ex.Message });
-            }
-        }
+        var game = await bgg.GetBoardGameAsync(id, ct);
+        return game == null
+            ? NotFound(new { message = "Spiel bei BGG nicht gefunden." })
+            : Ok(game);
     }
 }

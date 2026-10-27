@@ -1,33 +1,42 @@
 # NextTurn
 
-Brettspiel-Empfehlungen mit React, TypeScript und einer ASP.NET Core API. Die App nutzt BoardGameGeek-Ranglisten, Spielerdaten und Swipe-Feedback.
+Brettspiele entdecken, im lokalen Katalog suchen, favorisieren und den eigenen Spielgeschmack kennenlernen.
 
-## Voraussetzungen
+React / TypeScript / Vite / Tailwind / Framer Motion · ASP.NET Core 10 · EF Core / PostgreSQL 16
 
-- .NET SDK 10
-- Node.js 22.12 oder neuer und npm
-- Ein eigener BoardGameGeek-API-Token fuer die Spielabfragen
+## Lokal starten
 
-## API starten
+Voraussetzungen: .NET SDK 10, Node.js ab 22.12, Docker Desktop und ein genehmigter BGG-Anwendungstoken.
 
-Im Repository-Hauptordner:
+1. Die lokale Datenbank konfigurieren und starten:
 
 ```powershell
-dotnet restore backend/NextTurn.Api/NextTurn.Api.csproj
+Copy-Item .env.example .env
+# In .env ein eigenes lokales PostgreSQL-Passwort setzen.
+docker compose up -d
+```
+
+Bei einem bereits vorhandenen alten Volume bleibt die bisherige Datenbank erhalten. Falls die neue Datenbank noch fehlt, einmal anlegen:
+
+```powershell
+docker exec nextturn_postgres createdb -U nextturn nextturn
+```
+
+Die neuen Container nutzen das bestehende Volume weiter. Ein geändertes POSTGRES_PASSWORD setzt bei einem bereits initialisierten Volume nicht automatisch das Datenbankpasswort zurück. Verwende die bestehenden Zugangsdaten oder ändere sie ausdrücklich in PostgreSQL.
+
+2. Zugangsdaten ausschließlich lokal hinterlegen:
+
+```powershell
+dotnet user-secrets set "ConnectionStrings:NextTurn" "Host=localhost;Port=5432;Database=nextturn;Username=nextturn;Password=DEIN_LOKALES_PASSWORT" --project backend/NextTurn.Api
 dotnet user-secrets set "BggApi:BearerToken" "DEIN_BGG_TOKEN" --project backend/NextTurn.Api
-$env:ASPNETCORE_ENVIRONMENT = "Development"
 dotnet run --project backend/NextTurn.Api --launch-profile http
 ```
 
-Alternativ kann der Token ueber die Umgebungsvariable `BggApi__BearerToken` gesetzt werden. Zugangsdaten gehoeren nicht ins Repository.
+Die .NET User Secrets werden im Development-Profil gelesen. Für andere Umgebungen stehen ConnectionStrings__NextTurn und BggApi__BearerToken als Umgebungsvariablen zur Verfügung. Innerhalb des Docker-Netzes ist der Datenbankhost nextturn_db; beim lokalen dotnet run ist es localhost. Datenbankname und Benutzer: nextturn.
 
-API: http://localhost:5080, Swagger: http://localhost:5080/swagger
+API: http://localhost:5080 · Swagger: http://localhost:5080/swagger
 
-Die Rangliste liegt in `data/boardgames_ranks.csv`. Sie wird beim Build und Publish in den API-Ausgabeordner kopiert. `Data:BoardGameRanksCsvPath` wird relativ zum API-Ausgabeordner aufgeloest; ein absoluter Pfad ist ebenfalls moeglich.
-
-## Frontend starten
-
-In einem zweiten Terminal:
+3. Frontend in einem zweiten Terminal:
 
 ```powershell
 cd frontend
@@ -35,29 +44,73 @@ npm ci
 npm run dev
 ```
 
-Vite zeigt die lokale URL an (standardmaessig http://localhost:5173). Fuer eine andere API-Adresse `frontend/.env.example` nach `frontend/.env.local` kopieren und `VITE_API_BASE_URL` anpassen. Danach Vite neu starten bzw. neu bauen.
+App: http://localhost:5173. Eine andere API-Adresse kann über eine lokale frontend/.env.local mit VITE_API_BASE_URL konfiguriert werden. Das Beispiel liegt in frontend/.env.example. Niemals den BGG-Token als VITE-Variable hinterlegen.
 
-## Pruefungen
+## Katalog und Import
+
+Beim API-Start werden versionierte EF-Migrationen angewendet und die allgemeinen Ränge 1–10.000 aus data/boardgames_ranks.csv per BggId abgeglichen. Die CSV wird beim Build/Publish mitkopiert; der Pfad wird relativ zum API-Ausgabeordner aufgelöst.
+
+Danach ergänzt ein Hintergrundimport die BGG-Details: maximal 20 IDs pro Anfrage, mindestens fünf Sekunden Abstand, Retry-After und exponentieller Backoff. Erfolgreiche Batches werden sofort gespeichert. Ein Neustart setzt bei fehlenden oder älter als 30 Tage gewordenen Details fort. Fehlgeschlagene/fehlende IDs werden protokolliert und bleiben für den nächsten Lauf offen. Es werden keine Angaben erfunden.
+
+Der erste vollständige Detailimport benötigt selbst ohne Wartezeiten bei BGG mindestens rund 42 Minuten. Suche und Favoriten funktionieren bereits mit den CSV-Grunddaten. Die Entdecken-Queue verwendet nur Spiele mit importierten Details und bekannter passender Spieleranzahl.
+
+Der aktuelle Stand ist in der App und unter /api/games/status sichtbar. Import:Enabled=false deaktiviert den Hintergrundimport. Import:RefreshDays steuert die Aktualisierungsfrist. Ein aktualisierter CSV-Snapshot wird beim nächsten Start abgeglichen; alte Favoriten bleiben erhalten, auch wenn ein Spiel nicht mehr in den aktuellen Top 10.000 liegt.
+
+## Bewertungen und Empfehlungen
+
+- Like und SuperLike erscheinen in Meine Spiele.
+- Dislike und Skip sind keine Favoriten.
+- Jede Session besitzt genau einen aktuellen Zustand je Spiel. Identische Wiederholungen sind idempotent; Änderungen erzeugen ein neues Historienereignis und ersetzen den Lernzustand.
+- Favorit entfernen setzt den aktuellen Zustand auf Skip. Das Spiel bleibt damit aus der Entdecken-Queue ausgeschlossen.
+- Alle bereits bewerteten oder übersprungenen Spiele werden serverseitig ausgeschlossen, auch nach Browser-, API- und Datenbankneustart.
+- Lernen berücksichtigt Kategorien, Mechaniken, Komplexität, Spieldauer und Spielerzahl. SuperLikes gewichten stärker, Dislikes negativ; positive Komplexitäts-/Zeitpräferenzen werden nur aus Favoriten gebildet.
+- Standardmäßig sind 80 % der Queue personalisiert und 20 % Entdeckungen. Für den Entdeckungsanteil werden möglichst unbekannte Genres/Mechaniken gewählt. Das Verhältnis ist über Recommendations:ExplorationRatio (0,1–0,5) konfigurierbar, sofern genügend unbewertete passende Spiele verfügbar sind.
+- Pro Kandidatenabfrage werden standardmäßig höchstens 300 Spiele geladen. Lernabfragen projizieren nur benötigte Merkmale statt kompletter Beschreibungen/Cover. Die Recommendation Engine verwendet Repository-Interfaces und ist unabhängig von EF Core.
+- Nach jeder bestätigten Bewertung wird die Queue neu gewichtet; überholte Antworten werden verworfen.
+
+## Statistik
+
+Das Dashboard verwendet ausschließlich aktuelle Likes und SuperLikes, jedes Spiel einmal. Der Nenner für Kategorien/Mechaniken/Verteilungen sind alle aktuellen Favoriten, daher dürfen sich Kategorienprozente auf mehr als 100 % summieren. Durchschnittswerte verwenden bekannte Werte; fehlende Angaben werden ausgewiesen. Die mittlere Spieldauer ist die Mitte zwischen MinPlayTime und MaxPlayTime, ersatzweise PlayingTime. Unterstützte Spieleranzahlen und von BGG empfohlene Spieleranzahlen werden getrennt gezeigt. Bei weniger als fünf Favoriten gibt es nur einen Hinweis auf erste Tendenzen.
+
+## Tests
 
 ```powershell
-dotnet build backend/NextTurn.Api/NextTurn.Api.csproj
+dotnet test NextTurn.slnx
 cd frontend
 npm run build
 npm run lint
+npx playwright install chromium
+npm run test:e2e
 ```
 
-API-Smoke-Test bei laufender API:
+Die PostgreSQL-Tests erzeugen und entfernen ausschließlich eine eigene zufällig benannte nextturn_test_*-Datenbank. Sie lesen lokal ConnectionStrings:NextTurn oder alternativ NEXTTURN_TEST_CONNECTION; der Testbenutzer muss Testdatenbanken anlegen dürfen. Ohne PostgreSQL:
 
 ```powershell
-Invoke-RestMethod http://localhost:5080/api/health
-Invoke-RestMethod http://localhost:5080/api/games/ranked
+dotnet test NextTurn.slnx --filter "Category!=Integration"
 ```
 
-Die Empfehlungen und Swipes benoetigen den BGG-Token und Zugriff auf BoardGameGeek. Profile werden derzeit nur im Arbeitsspeicher gehalten und gehen bei einem API-Neustart verloren. Die optionale `docker-compose.yml` stellt PostgreSQL und Redis fuer die lokale Entwicklung bereit; die aktuelle API verwendet diese Dienste noch nicht. Das enthaltene Datenbankpasswort ist nur fuer lokale Entwicklung vorgesehen.
+Die Browser-Regressionstests verwenden ausdrücklich synthetische API-Fixtures. Zusätzlich wird die echte lokale API mit PostgreSQL und dem fortlaufenden Import geprüft. Eine Testbewertung verändert keine echte Browsersession.
 
-## Struktur
+## API-Überblick
 
-- `backend/NextTurn.Api`: API, Ranglisten, Empfehlungen und Swipe-Feedback
-- `frontend`: React-App mit Spielkarten und Swipe-Bedienung
-- `data`: BoardGameGeek-Rangliste
-- Die Word-Dateien enthalten die Projektplanung.
+- GET /api/games — lokale Suche; q, page, pageSize, sort (rank/rating/name/year), players, maxMinutes, minComplexity, maxComplexity, category, mechanic
+- GET /api/games/facets — lokale Kategorien/Mechaniken
+- GET /api/games/{id}?sessionId=... — lokale Details und aktueller Bewertungszustand
+- GET /api/games/recommendations?sessionId=...&players=... — personalisierte Queue
+- GET /api/games/status — Importfortschritt und Fehlerhinweis
+- POST /api/swipes — zentrale Bewertungslogik für Swipe, Suche und Details
+- GET /api/player/favorites?sessionId=... — gefilterte/paginierte Favoriten
+- DELETE /api/player/favorites/{id}?sessionId=... — Favorit zu Skip ändern
+- GET /api/player/statistics?sessionId=... — Kennzahlen und Verteilungen
+
+Die alte /api/bgg/{id}-Route bleibt als explizite BGG-Abfrage erhalten. Suche, Details, Favoriten und Empfehlungen benötigen sie nicht.
+
+## Architektur und Grenzen
+
+Controller → Service → Repository-Interface → EF-Repository → PostgreSQL. Entities liegen separat unter Entities, DTOs weiter unter Models. Migrationen liegen unter Data/Migrations. Redis ist vorbereitet und wird derzeit nicht benötigt; personalisierte Ergebnisse werden nicht über einen potenziell veralteten Cache ausgeliefert. Der bestehende BGG-MemoryCache bleibt für explizite Einzelabfragen erhalten.
+
+Session-IDs bleiben in localStorage. Das ist noch kein Benutzerkonto; ein anderes Browserprofil hat andere Favoriten. Eine neue Session löscht keine Daten der alten Session, wechselt aber das sichtbare Profil. Die Entity PlayerSession besitzt bereits ein optionales UserId-Feld für eine spätere Zuordnung.
+
+BGG-Daten und Cover gehören ihren jeweiligen Rechteinhabern. Attribution und Verlinkung erfolgen im globalen Footer. Das unveränderte Powered-by-BGG-Logo liegt unter frontend/public/powered-by-bgg.png (Bildquelle: https://dm1i7q1ruvbhg.cloudfront.net/assets/powered_by_bgg-9f2993c7fad826d5407c35b5c8117b08d2a6cdf5beb1f0c02d06a7dc7f5cdd7f.png). Lizenz/Registrierung: https://boardgamegeek.com/using_the_xml_api und https://boardgamegeek.com/xmlapi/termsofuse.
+
+Bestandsaufnahme, Risiken und tatsächliche Phasenergebnisse: docs/Entwicklungsauftrag.md.

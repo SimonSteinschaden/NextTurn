@@ -2,38 +2,28 @@ using Microsoft.AspNetCore.Mvc;
 using NextTurn.Api.Models;
 using NextTurn.Api.Services;
 
-namespace NextTurn.Api.Controllers
+namespace NextTurn.Api.Controllers;
+
+[ApiController, Route("api/swipes")]
+public class SwipesController(UserPreferenceService preferences) : ControllerBase
 {
-    [ApiController]
-    [Route("api/swipes")]
-    public class SwipesController : ControllerBase
+    [HttpPost]
+    public async Task<IActionResult> Submit(
+        [FromBody] SwipeFeedbackDto feedback,
+        CancellationToken ct
+    )
     {
-        private readonly UserPreferenceService _userPreferenceService;
-
-        public SwipesController(
-            UserPreferenceService userPreferenceService)
+        try
         {
-            _userPreferenceService = userPreferenceService;
+            return Ok(await preferences.ApplySwipeAsync(feedback, ct));
         }
-
-        [HttpPost]
-        public async Task<IActionResult> SubmitSwipe(
-            [FromBody] SwipeFeedbackDto feedback)
+        catch (ArgumentException)
         {
-            if (string.IsNullOrWhiteSpace(feedback.SessionId))
-            {
-                return BadRequest(new
-                {
-                    message = "SessionId is required."
-                });
-            }
-
-            var profile =
-                await _userPreferenceService.ApplySwipeAsync(
-                    feedback
-                );
-
-            return Ok(profile);
+            return BadRequest(new { message = "Ungültige Session, Spiel-ID oder Bewertung." });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "Spiel nicht im lokalen Katalog." });
         }
     }
 }

@@ -4,18 +4,25 @@ services:
     container_name: nextturn_postgres
     environment:
       POSTGRES_USER: nextturn
-      POSTGRES_PASSWORD: nextturn_password
-      POSTGRES_DB: nextturn_db
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the local .env file}
+      POSTGRES_DB: nextturn
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - nextturn_postgres_data:/var/lib/postgresql/data
-
+    networks:
+      default:
+        aliases:
+          - nextturn_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextturn -d nextturn"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
   redis:
     image: redis:7
     container_name: nextturn_redis
     ports:
-      - "6379:6379"
-
+      - "127.0.0.1:6379:6379"
 volumes:
   nextturn_postgres_data:

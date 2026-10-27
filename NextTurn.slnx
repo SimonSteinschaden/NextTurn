@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="backend/NextTurn.Api/NextTurn.Api.csproj" />
+    <Project Path="backend/NextTurn.Tests/NextTurn.Tests.csproj" />
+  </Folder>
+</Solution>

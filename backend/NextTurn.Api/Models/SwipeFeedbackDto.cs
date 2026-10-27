@@ -1,11 +1,15 @@
-namespace NextTurn.Api.Models
+using System.ComponentModel.DataAnnotations;
+
+namespace NextTurn.Api.Models;
+
+public class SwipeFeedbackDto
 {
-    public class SwipeFeedbackDto
-    {
-        public string SessionId { get; set; } = "";
+    [Required, StringLength(100)]
+    public string SessionId { get; set; } = "";
 
-        public int GameId { get; set; }
+    [Range(1, int.MaxValue)]
+    public int GameId { get; set; }
 
-        public SwipeAction Action { get; set; }
-    }
+    [EnumDataType(typeof(SwipeAction))]
+    public SwipeAction Action { get; set; }
 }

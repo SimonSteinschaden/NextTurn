@@ -1,216 +1,385 @@
-﻿import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-
 import GameCard from "./components/GameCard";
-import type { BoardGame } from "./api/nextTurnApi";
-import { getRecommendations, submitSwipe } from "./api/nextTurnApi";
+import CatalogView from "./components/CatalogView";
+import Dashboard from "./components/Dashboard";
+import GameDetails from "./components/GameDetails";
+import {
+  getCatalogStatus,
+  getRecommendations,
+  removeFavorite,
+  submitSwipe,
+} from "./api/nextTurnApi";
+import type { BoardGame, CatalogStatus, SwipeAction } from "./api/nextTurnApi";
+import "./App.css";
 
+type Tab = "discover" | "search" | "favorites" | "profile";
+const tabs: { id: Tab; label: string; icon: string }[] = [
+  { id: "discover", label: "Entdecken", icon: "✦" },
+  { id: "search", label: "Suche", icon: "⌕" },
+  { id: "favorites", label: "Meine Spiele", icon: "♡" },
+  { id: "profile", label: "Profil", icon: "◉" },
+];
 function App() {
-    const [players, setPlayers] = useState(3);
-    const [games, setGames] = useState<BoardGame[]>([]);
-    const [error, setError] = useState("");
-    const [isLoading, setIsLoading] = useState(false);
-    const [swipedGameIds, setSwipedGameIds] = useState<number[]>([]);
-    const [exitDirection, setExitDirection] =
-        useState<"left" | "right" | "up" | "down">("left");
-
-    const [sessionId] = useState(() => {
-        const existingSessionId = localStorage.getItem("nextturn-session-id");
-
-        if (existingSessionId) {
-            return existingSessionId;
-        }
-
-        const newSessionId = crypto.randomUUID();
-        localStorage.setItem("nextturn-session-id", newSessionId);
-
-        return newSessionId;
-    });
-
-    useEffect(() => {
-        loadRecommendations(true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [sessionId]);
-
-    async function loadRecommendations(replaceExisting = false) {
-        try {
-            setIsLoading(true);
-            setError("");
-
-            const result = await getRecommendations(players, sessionId);
-            const filteredResult = result.filter(
-                (game) => !swipedGameIds.includes(game.id)
-            );
-
-            setGames((previousGames) => {
-                if (replaceExisting) {
-                    return filteredResult;
-                }
-
-                const existingIds = new Set(previousGames.map((game) => game.id));
-                const nextGames = filteredResult.filter(
-                    (game) => !existingIds.has(game.id)
-                );
-
-                return [...previousGames, ...nextGames];
-            });
-        } catch (error) {
-            console.error(error);
-            setError(String(error));
-        } finally {
-            setIsLoading(false);
-        }
-    }
-
-    async function handleSwipe(action: 0 | 1 | 2 | 3) {
-        const directionMap = {
-            0: "left",
-            1: "right",
-            2: "up",
-            3: "down"
-        } as const;
-
-        if (!games[0]) {
-            return;
-        }
-
-        setExitDirection(directionMap[action]);
-
-        try {
-            const swipedId = games[0].id;
-            const newSwipedGameIds = [...swipedGameIds, swipedId];
-
-            setSwipedGameIds(newSwipedGameIds);
-            setGames((previousGames) =>
-                previousGames.filter((game) => game.id !== swipedId)
-            );
-
-            await submitSwipe(sessionId, swipedId, action);
-
-            const nextQueueSize = games.length - 1;
-            if (nextQueueSize <= 5) {
-                await loadRecommendations();
-            }
-        } catch (error) {
-            console.error(error);
-            setError(String(error));
-        }
-    }
-
-    function resetSession() {
-        const newSessionId = crypto.randomUUID();
-
-        localStorage.setItem("nextturn-session-id", newSessionId);
-
-        window.location.reload();
-    }
-
-    const currentGame = games[0];
-    const queueLength = games.length;
-    const swipeCount = swipedGameIds.length;
-
-    return (
-        <div className="min-h-screen bg-zinc-100 flex flex-col items-center p-4">
-            <div className="w-full max-w-3xl flex flex-col gap-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <label className="flex items-center gap-2 text-sm text-zinc-700">
-                        Spieleranzahl
-                        <input
-                            type="number"
-                            min={1}
-                            max={12}
-                            value={players}
-                            onChange={(e) => setPlayers(Number(e.target.value))}
-                            className="border rounded-lg px-2 py-1 w-20 text-sm"
-                        />
-                    </label>
-
-                    <div className="flex flex-wrap gap-3 justify-center">
-                        <button
-                            type="button"
-                            onClick={() => loadRecommendations(true)}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-xl shadow-sm hover:bg-blue-500 transition"
-                        >
-                            Empfehlungen laden
-                        </button>
-                        <button
-                            type="button"
-                            onClick={resetSession}
-                            className="bg-zinc-700 text-white px-4 py-2 rounded-xl shadow-sm hover:bg-zinc-600 transition"
-                        >
-                            Session zurücksetzen
-                        </button>
-                    </div>
-                </div>
-
-                <div className="flex flex-col items-center gap-2 text-sm text-zinc-600">
-                    {queueLength > 0 && (
-                        <p>
-                            Spiel {swipeCount + 1} von {swipeCount + queueLength}
-                        </p>
-                    )}
-                    {isLoading && <p>Lade Empfehlungen...</p>}
-                    {error && <p className="text-red-600">{error}</p>}
-                    {!isLoading && !error && queueLength === 0 && (
-                        <p className="text-zinc-500">Keine Empfehlungen verfügbar.</p>
-                    )}
-                </div>
-
-                <section className="w-full flex justify-center">
-                    <div className="w-full max-w-md min-h-[760px]">
-                        <AnimatePresence mode="wait">
-                            {currentGame ? (
-                                <GameCard
-                                    key={currentGame.id}
-                                    game={currentGame}
-                                    exitDirection={exitDirection}
-                                    onSwipe={(direction) => {
-                                        if (direction === "left") {
-                                            handleSwipe(0);
-                                        }
-                                        if (direction === "right") {
-                                            handleSwipe(1);
-                                        }
-                                    }}
-                                />
-                            ) : null}
-                        </AnimatePresence>
-                    </div>
-                </section>
-
-                <div className="w-full max-w-md flex flex-wrap justify-center gap-3">
-                    <button
-                        type="button"
-                        onClick={() => handleSwipe(0)}
-                        className="flex-1 min-w-[120px] bg-red-600 text-white px-4 py-3 rounded-2xl shadow-sm hover:bg-red-500 transition"
-                    >
-                        Dislike
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => handleSwipe(3)}
-                        className="flex-1 min-w-[120px] bg-zinc-800 text-white px-4 py-3 rounded-2xl shadow-sm hover:bg-zinc-700 transition"
-                    >
-                        Skip
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => handleSwipe(1)}
-                        className="flex-1 min-w-[120px] bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-sm hover:bg-emerald-500 transition"
-                    >
-                        Like
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => handleSwipe(2)}
-                        className="flex-1 min-w-[120px] bg-sky-600 text-white px-4 py-3 rounded-2xl shadow-sm hover:bg-sky-500 transition"
-                    >
-                        SuperLike
-                    </button>
-                </div>
-            </div>
-        </div>
+  const [tab, setTab] = useState<Tab>("discover");
+  const [players, setPlayers] = useState(3);
+  const [games, setGames] = useState<BoardGame[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [reload, setReload] = useState(0);
+  const [status, setStatus] = useState<CatalogStatus | null>(null);
+  const [selected, setSelected] = useState<BoardGame | null>(null);
+  const [exitDirection, setExitDirection] = useState<
+    "left" | "right" | "up" | "down"
+  >("left");
+  const [sessionId] = useState(() => {
+    const existing = localStorage.getItem("nextturn-session-id");
+    if (existing && /^[a-zA-Z0-9_-]{1,100}$/.test(existing)) return existing;
+    const next = crypto.randomUUID();
+    localStorage.setItem("nextturn-session-id", next);
+    return next;
+  });
+  const rated = useRef(new Set<number>());
+  const savingRef = useRef(false);
+  const requestSequence = useRef(0);
+  useEffect(() => {
+    let active = true;
+    const poll = () =>
+      getCatalogStatus()
+        .then((s) => {
+          if (active) setStatus(s);
+        })
+        .catch(() => {});
+    void poll();
+    const timer = setInterval(poll, 15000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const sequence = ++requestSequence.current;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const result = await getRecommendations(
+          players,
+          sessionId,
+          controller.signal,
+        );
+        if (sequence === requestSequence.current)
+          setGames(result.filter((g) => !rated.current.has(g.id)));
+      } catch (e) {
+        if (!controller.signal.aborted && sequence === requestSequence.current)
+          setError(
+            e instanceof Error
+              ? e.message
+              : "Empfehlungen konnten nicht geladen werden.",
+          );
+      } finally {
+        if (sequence === requestSequence.current) setLoading(false);
+      }
+    };
+    void load();
+    return () => controller.abort();
+  }, [players, sessionId, revision, reload]);
+  const rate = useCallback(
+    async (game: BoardGame, action: SwipeAction) => {
+      if (savingRef.current)
+        throw new Error("Die letzte Bewertung wird noch gespeichert.");
+      savingRef.current = true;
+      setSaving(true);
+      // Immediately invalidate an in-flight queue response, even before React rerenders.
+      requestSequence.current++;
+      rated.current.add(game.id);
+      try {
+        await submitSwipe(sessionId, game.id, action);
+        setGames((old) => old.filter((g) => g.id !== game.id));
+        setRevision((v) => v + 1);
+      } catch (e) {
+        rated.current.delete(game.id);
+        setReload((v) => v + 1);
+        throw e;
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
+      }
+    },
+    [sessionId],
+  );
+  async function swipe(action: SwipeAction) {
+    const game = games[0];
+    if (!game || savingRef.current) return;
+    setExitDirection(
+      ({ 0: "left", 1: "right", 2: "up", 3: "down" } as const)[action],
     );
+    setError("");
+    try {
+      await rate(game, action);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Bewertung fehlgeschlagen.");
+    }
+  }
+  async function remove(game: BoardGame) {
+    await removeFavorite(game.id, sessionId);
+    rated.current.add(game.id);
+    setRevision((v) => v + 1);
+  }
+  function newSession() {
+    if (
+      window.confirm(
+        "Eine neue Session startet ein neues Profil. Deine bisherigen Favoriten bleiben unter der alten Session-ID gespeichert, sind hier danach aber nicht mehr sichtbar. Fortfahren?",
+      )
+    ) {
+      localStorage.setItem("nextturn-session-id", crypto.randomUUID());
+      window.location.reload();
+    }
+  }
+  return (
+    <div className="app-shell">
+      <header className="app-header">
+        <a
+          className="brand"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            setTab("discover");
+          }}
+        >
+          <span className="brand-mark">
+            n<span>↗</span>
+          </span>
+          <span>
+            next<span>turn</span>
+            <small>DEIN NÄCHSTER SPIELEABEND</small>
+          </span>
+        </a>
+        <nav className="main-nav" aria-label="Hauptnavigation">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              aria-current={tab === t.id ? "page" : undefined}
+              onClick={() => setTab(t.id)}
+            >
+              <span aria-hidden="true">{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <span className="local-badge">
+          <span /> Dein Spielekompass
+        </span>
+      </header>
+      <main className="app-main">
+        {status && (
+          <div className="catalog-progress">
+            <span>
+              {status.catalog.total.toLocaleString("de-DE")} Spiele im Katalog
+            </span>
+            <span>
+              {status.catalog.detailed.toLocaleString("de-DE")} mit Details
+              {status.catalog.importRunning ? " · Import läuft" : ""}
+            </span>
+          </div>
+        )}
+        {status?.lastError && (
+          <p className="notice error" role="status">
+            {status.lastError}
+          </p>
+        )}
+        {tab === "discover" && (
+          <section className="discover-view" aria-labelledby="discover-title">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">
+                  Ein Spiel. Ein Gefühl. Dein nächster Favorit.
+                </p>
+                <h1 id="discover-title">Was kommt auf den Tisch?</h1>
+                <p className="section-intro">
+                  Dein Geschmack gibt die Richtung vor. Neue Genres bleiben im
+                  Spiel.
+                </p>
+              </div>
+              <label className="players-control">
+                Personen
+                <select
+                  value={players}
+                  disabled={saving}
+                  onChange={(e) => {
+                    setGames([]);
+                    setPlayers(Number(e.target.value));
+                  }}
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1}>{i + 1}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="discovery-layout">
+              <aside className="discovery-aside">
+                <span className="aside-number">
+                  80<span>/20</span>
+                </span>
+                <h2>Vertrautes trifft Neugier.</h2>
+                <p>
+                  Die meisten Vorschläge orientieren sich an deinen Vorlieben.
+                  Jeder fünfte Platz öffnet die Tür zu einer neuen Richtung.
+                </p>
+                <div className="aside-note">
+                  Bereits bewertete oder übersprungene Spiele kommen nicht
+                  erneut in deine Queue.
+                </div>
+                <button
+                  className="text-button"
+                  onClick={() => setTab("profile")}
+                >
+                  Mein Spielerprofil ansehen →
+                </button>
+              </aside>
+              <div className="swipe-stage">
+                {error && (
+                  <p className="notice error" role="alert">
+                    {error}
+                  </p>
+                )}
+                <div className="queue-meta" aria-live="polite">
+                  <span>
+                    {saving
+                      ? "Bewertung wird gespeichert …"
+                      : loading
+                        ? "Empfehlungen werden sortiert …"
+                        : games.length + " Spiele zum Entdecken"}
+                  </span>
+                  <button
+                    disabled={saving || loading}
+                    onClick={() => {
+                      setError("");
+                      setReload((v) => v + 1);
+                    }}
+                    aria-label="Empfehlungen aktualisieren"
+                  >
+                    ↻
+                  </button>
+                </div>
+                <div className="swipe-card-wrap">
+                  <AnimatePresence mode="wait" custom={exitDirection}>
+                    {games[0] ? (
+                      <GameCard
+                        key={games[0].id}
+                        game={games[0]}
+                        exitDirection={exitDirection}
+                        disabled={saving || loading}
+                        onSwipe={(direction) => {
+                          void swipe(direction === "left" ? 0 : 1);
+                        }}
+                        onDetails={() => setSelected(games[0])}
+                      />
+                    ) : (
+                      <div className="empty-discovery" key="empty">
+                        <span>♟</span>
+                        <h2>
+                          {loading
+                            ? "Wir suchen dein nächstes Spiel …"
+                            : "Hier ist gerade alles entdeckt."}
+                        </h2>
+                        <p>
+                          {status?.catalog.detailed === 0
+                            ? "Der Katalog wird noch mit BGG-Details ergänzt. In der Suche findest du schon alle Ranglisteneinträge."
+                            : "Versuche eine andere Spieleranzahl oder lade die Empfehlungen neu."}
+                        </p>
+                        <button onClick={() => setTab("search")}>
+                          Im Katalog stöbern →
+                        </button>
+                      </div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <div className="swipe-actions">
+                  {(
+                    [
+                      { action: 0, label: "Dislike", icon: "✕" },
+                      { action: 3, label: "Skip", icon: "→" },
+                      { action: 1, label: "Like", icon: "♥" },
+                      { action: 2, label: "SuperLike", icon: "★" },
+                    ] as const
+                  ).map((a) => (
+                    <button
+                      key={a.action}
+                      className={"swipe-action action-" + a.action}
+                      disabled={!games[0] || saving || loading}
+                      onClick={() => {
+                        void swipe(a.action);
+                      }}
+                    >
+                      <span aria-hidden="true">{a.icon}</span>
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+        {tab === "search" && (
+          <CatalogView
+            sessionId={sessionId}
+            revision={revision}
+            onOpen={setSelected}
+            onRate={rate}
+            onRemove={remove}
+          />
+        )}
+        {tab === "favorites" && (
+          <CatalogView
+            key="favorites"
+            sessionId={sessionId}
+            favorites
+            revision={revision}
+            onOpen={setSelected}
+            onRate={rate}
+            onRemove={remove}
+          />
+        )}
+        {tab === "profile" && (
+          <>
+            <Dashboard sessionId={sessionId} revision={revision} />
+            <div className="session-note">
+              <p>
+                Dein Profil bleibt über die Session in diesem Browser erhalten.
+                Es ist noch kein Benutzerkonto.
+              </p>
+              <button className="text-button" onClick={newSession}>
+                Neue Session beginnen
+              </button>
+            </div>
+          </>
+        )}
+      </main>
+      <footer className="app-footer">
+        <span>Ein guter Abend beginnt mit dem richtigen Spiel.</span>
+        <a
+          href="https://boardgamegeek.com"
+          target="_blank"
+          rel="noreferrer"
+          className="bgg-credit"
+        >
+          <img src="/powered-by-bgg.png" alt="Powered by BGG" />
+        </a>
+      </footer>
+      {selected && (
+        <GameDetails
+          key={selected.id}
+          game={selected}
+          sessionId={sessionId}
+          onClose={() => setSelected(null)}
+          onRate={rate}
+        />
+      )}
+    </div>
+  );
 }
-
 export default App;

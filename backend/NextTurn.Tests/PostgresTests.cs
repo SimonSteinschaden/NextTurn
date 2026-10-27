@@ -1,0 +1,304 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using NextTurn.Api.Data;
+using NextTurn.Api.Entities;
+using NextTurn.Api.Models;
+using NextTurn.Api.Repositories;
+using NextTurn.Api.Services;
+using Npgsql;
+using Xunit;
+
+namespace NextTurn.Tests;
+
+public class PostgresFixture : IAsyncLifetime
+{
+    private string adminConnection = "";
+    private readonly string database = "nextturn_test_" + Guid.NewGuid().ToString("N");
+    public string Connection { get; private set; } = "";
+
+    public async Task InitializeAsync()
+    {
+        var config = new ConfigurationBuilder()
+            .AddUserSecrets("9cdbb92b-7d86-4a3b-b461-1880a0cee753")
+            .AddEnvironmentVariables()
+            .Build();
+        var original =
+            Environment.GetEnvironmentVariable("NEXTTURN_TEST_CONNECTION")
+            ?? config.GetConnectionString("NextTurn")
+            ?? throw new InvalidOperationException(
+                "Integration tests require local User Secrets ConnectionStrings:NextTurn or NEXTTURN_TEST_CONNECTION."
+            );
+        var builder = new NpgsqlConnectionStringBuilder(original)
+        {
+            Database = "postgres",
+            Pooling = false,
+        };
+        adminConnection = builder.ConnectionString;
+        await using var admin = new NpgsqlConnection(adminConnection);
+        await admin.OpenAsync();
+        await using var create = new NpgsqlCommand("CREATE DATABASE " + database, admin);
+        await create.ExecuteNonQueryAsync();
+        builder.Database = database;
+        Connection = builder.ConnectionString;
+        await using var db = CreateDb();
+        await db.Database.MigrateAsync();
+    }
+
+    public NextTurnDbContext CreateDb() =>
+        new(new DbContextOptionsBuilder<NextTurnDbContext>().UseNpgsql(Connection).Options);
+
+    public async Task DisposeAsync()
+    {
+        if (string.IsNullOrEmpty(adminConnection))
+            return;
+        if (!database.StartsWith("nextturn_test_") || database.Length != 46)
+            throw new InvalidOperationException("Refusing to drop an unexpected database.");
+        await using var admin = new NpgsqlConnection(adminConnection);
+        await admin.OpenAsync();
+        await using var drop = new NpgsqlCommand(
+            "DROP DATABASE IF EXISTS " + database + " WITH (FORCE)",
+            admin
+        );
+        await drop.ExecuteNonQueryAsync();
+    }
+}
+
+[Trait("Category", "Integration")]
+public class PostgresTests(PostgresFixture fixture) : IClassFixture<PostgresFixture>
+{
+    private static BoardGameRankEntry Rank(int id, int rank, string name) =>
+        new()
+        {
+            BggId = id,
+            BggRank = rank,
+            Name = name,
+            YearPublished = 2020,
+            AverageRating = 7.5,
+        };
+
+    private static BoardGameDto Detail(int id, string name) =>
+        new()
+        {
+            Id = id,
+            Name = name,
+            MinPlayers = 2,
+            MaxPlayers = 4,
+            MinPlayTime = 30,
+            MaxPlayTime = 60,
+            PlayingTime = 60,
+            Complexity = 2.5,
+            Categories = ["Fantasy"],
+            Mechanics = ["Deck Building"],
+            GameTypes = ["boardgame"],
+            AverageRating = 8,
+        };
+
+    [Fact]
+    public async Task ImportUpsertsResumesAndPreservesMetadataOnFailure()
+    {
+        await using var db = fixture.CreateDb();
+        var repo = new EfGameRepository(db);
+        var ranks = new[] { Rank(1001, 1, "Import One"), Rank(1002, 2, "Import Two") };
+        await repo.SeedAsync(ranks, default);
+        await repo.SeedAsync(ranks, default);
+        Assert.Equal(2, await db.Games.CountAsync(g => g.BggId == 1001 || g.BggId == 1002));
+        await repo.SaveDetailsAsync([Detail(1001, "Import One")], [1001], null, default);
+        var pending = await repo.ImportIdsAsync(DateTimeOffset.UtcNow.AddDays(-30), default);
+        Assert.DoesNotContain(1001, pending);
+        Assert.Contains(1002, pending);
+        await repo.SaveDetailsAsync([], [1001], "Temporary upstream error", default);
+        var saved = await repo.FindAsync(1001, default);
+        Assert.NotNull(saved!.DetailsUpdatedAt);
+        Assert.Equal("Fantasy", saved.Categories.Single());
+        await repo.SaveDetailsAsync([Detail(1002, "Import Two")], [1002], null, default);
+        await using var restarted = fixture.CreateDb();
+        Assert.Equal(
+            2,
+            await restarted.Games.CountAsync(g =>
+                (g.BggId == 1001 || g.BggId == 1002) && g.DetailsUpdatedAt != null
+            )
+        );
+    }
+
+    [Fact]
+    public async Task LocalSearchFiltersSortsPaginatesAndEscapesWildcard()
+    {
+        await using var db = fixture.CreateDb();
+        var repo = new EfGameRepository(db);
+        await repo.SeedAsync(
+            [
+                Rank(2001, 1, "Needle Alpha"),
+                Rank(2002, 2, "Needle Beta"),
+                Rank(2003, 3, "Different"),
+            ],
+            default
+        );
+        await repo.SaveDetailsAsync(
+            [Detail(2001, "Needle Alpha"), Detail(2002, "Needle Beta")],
+            [2001, 2002],
+            null,
+            default
+        );
+        var result = await repo.SearchAsync(
+            new()
+            {
+                Q = "nEEdLE",
+                Players = 3,
+                MaxMinutes = 60,
+                MaxComplexity = 3,
+                Category = "Fantasy",
+                Mechanic = "Deck Building",
+                PageSize = 1,
+                Page = 2,
+            },
+            null,
+            false,
+            default
+        );
+        Assert.Equal(2, result.Total);
+        Assert.Single(result.Items);
+        Assert.Equal(2002, result.Items[0].Id);
+        var literal = await repo.SearchAsync(new() { Q = "%" }, null, false, default);
+        Assert.Equal(0, literal.Total);
+        var facets = await repo.FacetsAsync(default);
+        Assert.Contains("Fantasy", facets.Categories);
+    }
+
+    [Fact]
+    public async Task LikeFromAnyViewHasOneCurrentFavoriteAndDurableHistory()
+    {
+        await using (var seed = fixture.CreateDb())
+        {
+            var repo = new EfGameRepository(seed);
+            await repo.SeedAsync([Rank(3001, 1, "Interaction Test")], default);
+            await repo.SaveDetailsAsync([Detail(3001, "Interaction Test")], [3001], null, default);
+        }
+        const string session = "integration-session";
+        async Task Rate(SwipeAction action)
+        {
+            await using var db = fixture.CreateDb();
+            var games = new EfGameRepository(db);
+            var events = new EfInteractionRepository(db);
+            await new UserPreferenceService(events, games).ApplySwipeAsync(
+                new()
+                {
+                    SessionId = session,
+                    GameId = 3001,
+                    Action = action,
+                }
+            );
+        }
+        await Rate(SwipeAction.Like);
+        await Rate(SwipeAction.Like);
+        await Rate(SwipeAction.SuperLike);
+        await using (var read = fixture.CreateDb())
+        {
+            Assert.Equal(1, await read.Interactions.CountAsync(i => i.SessionId == session));
+            Assert.Equal(2, await read.InteractionEvents.CountAsync(i => i.SessionId == session));
+            var favorites = await new EfGameRepository(read).SearchAsync(
+                new(),
+                session,
+                true,
+                default
+            );
+            Assert.Single(favorites.Items);
+            Assert.Equal(SwipeAction.SuperLike, favorites.Items[0].UserAction);
+            var candidates = await new EfGameRepository(read).CandidatesAsync(
+                session,
+                3,
+                [],
+                [],
+                true,
+                100,
+                default
+            );
+            Assert.DoesNotContain(candidates, g => g.BggId == 3001);
+        }
+        await Rate(SwipeAction.Dislike);
+        await using (var read = fixture.CreateDb())
+        {
+            var current = await new EfInteractionRepository(read).CurrentAsync(session, default);
+            Assert.Equal(0, StatisticsService.Calculate(current).Favorites);
+            Assert.Equal(
+                -1,
+                UserPreferenceService.BuildProfile(session, current).CategoryScores["Fantasy"]
+            );
+        }
+        await Rate(SwipeAction.Skip);
+        await using (var read = fixture.CreateDb())
+        {
+            var candidates = await new EfGameRepository(read).CandidatesAsync(
+                session,
+                3,
+                [],
+                [],
+                true,
+                100,
+                default
+            );
+            Assert.DoesNotContain(candidates, g => g.BggId == 3001);
+        }
+    }
+
+    [Fact]
+    public async Task ActualCsvProvidesTenThousandUniqueGeneralRanks()
+    {
+        var folder = new DirectoryInfo(AppContext.BaseDirectory);
+        while (
+            folder != null
+            && !File.Exists(Path.Combine(folder.FullName, "data", "boardgames_ranks.csv"))
+        )
+            folder = folder.Parent;
+        Assert.NotNull(folder);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Data:BoardGameRanksCsvPath"] = Path.Combine(
+                        folder.FullName,
+                        "data",
+                        "boardgames_ranks.csv"
+                    ),
+                }
+            )
+            .Build();
+        var ranks = new CsvGameRepository(config).LoadRankedGames();
+        Assert.Equal(10000, ranks.Count);
+        Assert.Equal(10000, ranks.Select(g => g.BggId).Distinct().Count());
+        await using var db = fixture.CreateDb();
+        var repo = new EfGameRepository(db);
+        await repo.SeedAsync(ranks, default);
+        await repo.SeedAsync(ranks, default);
+        var status = await repo.StatusAsync(false, default);
+        Assert.Equal(10000, status.Total);
+    }
+
+    [Fact]
+    public async Task ConcurrentDuplicateLikesStayIdempotent()
+    {
+        await using (var seed = fixture.CreateDb())
+        {
+            var games = new EfGameRepository(seed);
+            await games.SeedAsync([Rank(4001, 1, "Concurrent Test")], default);
+            await games.SaveDetailsAsync([Detail(4001, "Concurrent Test")], [4001], null, default);
+        }
+        var session = "concurrent-" + Guid.NewGuid().ToString("N");
+        await Task.WhenAll(
+            Enumerable
+                .Range(0, 6)
+                .Select(async _ =>
+                {
+                    await using var db = fixture.CreateDb();
+                    await new EfInteractionRepository(db).SaveAsync(
+                        session,
+                        4001,
+                        SwipeAction.Like,
+                        default
+                    );
+                })
+        );
+        await using var verify = fixture.CreateDb();
+        Assert.Equal(1, await verify.Interactions.CountAsync(i => i.SessionId == session));
+        Assert.Equal(1, await verify.InteractionEvents.CountAsync(i => i.SessionId == session));
+    }
+}
